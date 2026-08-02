@@ -1,4 +1,5 @@
-export type GameMode = "journey" | "star-rush" | "bubble-party";
+export type GameMode = "orbit-defense" | "journey" | "star-rush" | "bubble-party";
+export type ArcadeMode = Exclude<GameMode, "journey">;
 
 export type GameModeDefinition = {
   id: GameMode;
@@ -18,8 +19,18 @@ export type GameResult = {
 };
 
 export const RUSH_SECONDS = 30;
+export const DEFENSE_SECONDS = 45;
 
 export const GAME_MODES: readonly GameModeDefinition[] = [
+  {
+    id: "orbit-defense",
+    icon: "🪐",
+    label: "3D 星球守卫战",
+    shortLabel: "3D 守卫",
+    description: "驾驶飞船，用键盘击退立体陨石",
+    startCopy: "锁定陨石上的单词，发射键盘能量",
+    goal: "守护星球 45 秒",
+  },
   {
     id: "journey",
     icon: "🚀",
@@ -64,7 +75,14 @@ export function getModePrompts(mode: GameMode, lesson: LessonInput): string[] {
 
 export function getSessionReward(mode: GameMode, lessonXp: number): number {
   if (mode === "journey") return lessonXp;
+  if (mode === "orbit-defense") return 50;
   return mode === "star-rush" ? 35 : 30;
+}
+
+export function getModeDuration(mode: GameMode): number | null {
+  if (mode === "orbit-defense") return DEFENSE_SECONDS;
+  if (mode === "star-rush") return RUSH_SECONDS;
+  return null;
 }
 
 export function calculateGameResult(
@@ -81,6 +99,9 @@ export function calculateGameResult(
   let stars = accuracy >= 97 ? 3 : accuracy >= 88 ? 2 : 1;
   if (mode === "star-rush") {
     stars = score >= 650 && accuracy >= 92 ? 3 : score >= 350 && accuracy >= 82 ? 2 : 1;
+  }
+  if (mode === "orbit-defense") {
+    stars = score >= 850 && accuracy >= 92 ? 3 : score >= 440 && accuracy >= 82 ? 2 : 1;
   }
   if (mode === "bubble-party") {
     stars = bestStreak >= 18 && accuracy >= 95 ? 3 : bestStreak >= 9 && accuracy >= 85 ? 2 : 1;

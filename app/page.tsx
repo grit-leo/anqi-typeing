@@ -4,12 +4,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   calculateGameResult,
   GAME_MODES,
+  getModeDuration,
   getModePrompts,
   getSessionReward,
   RUSH_SECONDS,
   type GameMode,
   type GameResult,
+  type ArcadeMode,
 } from "./game-engine";
+import { TypingArena3D } from "./TypingArena3D";
 
 type Lesson = {
   id: string;
@@ -26,7 +29,7 @@ type Progress = {
   xp: number;
   bestWpm: number;
   totalStars: number;
-  arcadeBest: { "star-rush": number; "bubble-party": number };
+  arcadeBest: Record<ArcadeMode, number>;
 };
 
 type Result = GameResult & { reward: number };
@@ -51,7 +54,7 @@ const DEFAULT_PROGRESS: Progress = {
   xp: 0,
   bestWpm: 0,
   totalStars: 0,
-  arcadeBest: { "star-rush": 0, "bubble-party": 0 },
+  arcadeBest: { "orbit-defense": 0, "star-rush": 0, "bubble-party": 0 },
 };
 
 const FINGER_GROUPS: Record<string, { finger: string; hand: "左手" | "右手" }> = {
@@ -82,7 +85,7 @@ function safeLoadProgress(): Progress {
 
 export default function Home() {
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [gameMode, setGameMode] = useState<GameMode>("journey");
+  const [gameMode, setGameMode] = useState<GameMode>("orbit-defense");
   const [promptIndex, setPromptIndex] = useState(0);
   const [typed, setTyped] = useState("");
   const [status, setStatus] = useState<"ready" | "playing" | "complete">("ready");
@@ -110,14 +113,16 @@ export default function Home() {
   const wpm = elapsed < 1 ? 0 : Math.round(correctHits / 5 / (elapsed / 60));
   const liveScore = Math.max(0, correctHits * 10 + bestStreak * 3 - mistakes * 4);
   const multiplier = Math.min(5, 1 + Math.floor(streak / 5));
-  const timeLeft = Math.max(0, Math.ceil(RUSH_SECONDS - elapsed));
+  const modeDuration = getModeDuration(gameMode);
+  const isTimedMode = modeDuration !== null;
+  const timeLeft = Math.max(0, Math.ceil((modeDuration ?? RUSH_SECONDS) - elapsed));
 
   const gameProgress = useMemo(() => {
-    if (gameMode === "star-rush") return Math.min(100, Math.round((elapsed / RUSH_SECONDS) * 100));
+    if (modeDuration) return Math.min(100, Math.round((elapsed / modeDuration) * 100));
     const completedLength = activePrompts.slice(0, promptIndex).reduce((sum, item) => sum + item.length, 0);
     const totalLength = activePrompts.reduce((sum, item) => sum + item.length, 0);
     return Math.min(100, Math.round(((completedLength + typed.length) / totalLength) * 100));
-  }, [activePrompts, elapsed, gameMode, promptIndex, typed.length]);
+  }, [activePrompts, elapsed, modeDuration, promptIndex, typed.length]);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => setProgress(safeLoadProgress()));
@@ -167,10 +172,10 @@ export default function Home() {
       const isCourse = gameMode === "journey";
       const alreadyComplete = current.completed.includes(lesson.id);
       const completed = isCourse && !alreadyComplete ? [...current.completed, lesson.id] : current.completed;
-      const arcadeBest = isCourse ? current.arcadeBest : {
-        ...current.arcadeBest,
-        [gameMode]: Math.max(current.arcadeBest[gameMode], finalResult.score),
-      };
+      let arcadeBest = current.arcadeBest;
+      if (gameMode !== "journey") {
+        arcadeBest = { ...current.arcadeBest, [gameMode]: Math.max(current.arcadeBest[gameMode], finalResult.score) };
+      }
       const next = {
         completed,
         xp: current.xp + finalResult.reward,
@@ -198,8 +203,9 @@ export default function Home() {
   }, [gameMode, lesson.xp, saveCompletion]);
 
   useEffect(() => {
-    if (status !== "playing" || gameMode !== "star-rush") return;
-    const remaining = Math.max(0, RUSH_SECONDS * 1000 - (Date.now() - startTime.current));
+    const duration = getModeDuration(gameMode);
+    if (status !== "playing" || duration === null) return;
+    const remaining = Math.max(0, duration * 1000 - (Date.now() - startTime.current));
     const timer = window.setTimeout(() => finishGame(correctHits, mistakes, bestStreak), remaining);
     return () => window.clearTimeout(timer);
   }, [bestStreak, correctHits, finishGame, gameMode, mistakes, status]);
@@ -233,7 +239,7 @@ export default function Home() {
 
       if (nextTyped.length === prompt.length) {
         if (promptIndex === activePrompts.length - 1) {
-          if (gameMode === "star-rush") {
+          if (getModeDuration(gameMode) !== null) {
             setPromptIndex(0);
             setTyped("");
             setLaps((current) => current + 1);
@@ -304,7 +310,9 @@ export default function Home() {
 
   const buddyCopy = streak >= 15
     ? `哇！${multiplier} 倍能量，继续保持！`
-    : gameMode === "star-rush"
+    : gameMode === "orbit-defense"
+      ? "瞄准陨石文字，按对一键就发射一束能量。"
+      : gameMode === "star-rush"
       ? "别着急，稳稳接住每一颗星。"
       : gameMode === "bubble-party"
         ? "泡泡会等你，看准再按就好。"
@@ -357,7 +365,7 @@ export default function Home() {
             <div className="session-stats">
               <span><small>速度</small><strong>{wpm}</strong><em>WPM</em></span>
               <span><small>准确</small><strong>{sessionAccuracy}</strong><em>%</em></span>
-              <span className={gameMode === "star-rush" && timeLeft <= 5 ? "danger" : ""}><small>{gameMode === "star-rush" ? "剩余" : "连击"}</small><strong>{gameMode === "star-rush" ? timeLeft : streak}</strong><em>{gameMode === "star-rush" ? "秒" : "次"}</em></span>
+              <span className={isTimedMode && timeLeft <= 5 ? "danger" : ""}><small>{isTimedMode ? "剩余" : "连击"}</small><strong>{isTimedMode ? timeLeft : streak}</strong><em>{isTimedMode ? "秒" : "次"}</em></span>
             </div>
           </div>
 
@@ -370,7 +378,7 @@ export default function Home() {
           </div>
 
           <div className="flight-path" aria-label={`本局进度 ${gameProgress}%`}>
-            <span className="flight-label">{gameMode === "star-rush" ? `第 ${laps + 1} 圈` : activeMode.goal}</span>
+            <span className="flight-label">{isTimedMode ? `第 ${laps + 1} 波 · ${activeMode.goal}` : activeMode.goal}</span>
             <span className="flight-line"><i style={{ width: `${gameProgress}%` }} /></span>
             <span className="rocket" style={{ left: `calc(${gameProgress}% - 14px)` }}>{gameMode === "bubble-party" ? "●" : "➤"}</span>
             <span className="finish-planet">★</span>
@@ -379,9 +387,9 @@ export default function Home() {
           {status === "complete" && result ? (
             <div className={`result-panel result-${gameMode}`} role="dialog" aria-label="任务完成">
               <div className="confetti"><i /><i /><i /><i /><i /><i /></div>
-              <span className="result-orbit">{gameMode === "star-rush" ? "⚡" : gameMode === "bubble-party" ? "●" : "✓"}</span>
+              <span className="result-orbit">{gameMode === "orbit-defense" ? "🛡" : gameMode === "star-rush" ? "⚡" : gameMode === "bubble-party" ? "●" : "✓"}</span>
               <span className="eyebrow">{gameMode === "journey" ? "新航线已点亮" : "游戏结算"}</span>
-              <h2>{gameMode === "star-rush" ? "星星雨大丰收！" : gameMode === "bubble-party" ? "泡泡全部消除！" : "成功抵达下一站！"}</h2>
+              <h2>{gameMode === "orbit-defense" ? "星球守卫成功！" : gameMode === "star-rush" ? "星星雨大丰收！" : gameMode === "bubble-party" ? "泡泡全部消除！" : "成功抵达下一站！"}</h2>
               <div className="result-stars" aria-label={`获得 ${result.stars} 颗星`}>{[0, 1, 2].map((star) => <span className={star < result.stars ? "earned" : ""} key={star}>★</span>)}</div>
               <div className="result-score">
                 <span><strong>{result.score}</strong><small>本局得分</small></span>
@@ -397,7 +405,23 @@ export default function Home() {
             </div>
           ) : (
             <>
-              <div className={`typing-stage scene-${gameMode}`}>
+              {gameMode === "orbit-defense" ? (
+                <TypingArena3D
+                  word={prompt}
+                  typedLength={typed.length}
+                  correctHits={correctHits}
+                  mistakes={mistakes}
+                  streak={streak}
+                  score={liveScore}
+                  timeLeft={timeLeft}
+                  wave={laps + 1}
+                  status={status}
+                  target={target}
+                  hint={finger ? `用${finger.hand}${finger.finger}发射` : "看准目标再发射"}
+                  onStart={startGame}
+                  onExit={resetBoard}
+                />
+              ) : <div className={`typing-stage scene-${gameMode}`}>
                 <div className="scene-decor" aria-hidden="true">
                   {gameMode === "journey" && <><i className="planet-a" /><i className="planet-b" /><i className="tiny-rocket">➤</i></>}
                   {gameMode === "star-rush" && <><i className="falling-star star-a">★</i><i className="falling-star star-b">★</i><i className="falling-star star-c">★</i><i className="shield" /></>}
@@ -417,7 +441,7 @@ export default function Home() {
                   {status === "playing" && finger ? <><span className={`hand-dot ${finger.hand === "右手" ? "right" : ""}`} />用<strong>{finger.hand}{finger.finger}</strong>按下 <kbd>{target === " " ? "空格" : target.toUpperCase()}</kbd></> : <><span className="hand-dot" />F、J 键的小凸点就是手指“停机坪”</>}
                 </div>
                 {status === "ready" ? <button className="primary-button start-button" onClick={startGame}>开始游戏 <span>→</span><small>也可按 Enter</small></button> : <button className="quit-button" onClick={resetBoard}>暂停并退出本局</button>}
-              </div>
+              </div>}
 
               <div className="keyboard-wrap" aria-label="屏幕键盘，可点击输入">
                 <div className="combo-meter"><span><i style={{ width: `${Math.min(100, (streak % 5) * 20)}%` }} /></span><b>{multiplier}× 能量</b></div>
@@ -442,8 +466,8 @@ export default function Home() {
           <div className="goal-card">
             <span className="eyebrow">本局挑战</span><h3>{activeMode.goal}</h3>
             <div className="goal-row"><span className="goal-icon violet">◎</span><p><strong>保持准确</strong><small>目标达到 95%</small></p><b>{sessionAccuracy}%</b></div>
-            <div className="goal-row"><span className="goal-icon coral">⚡</span><p><strong>{gameMode === "star-rush" ? "收集能量" : "连续命中"}</strong><small>{gameMode === "star-rush" ? "按对越多分数越高" : "连续按对获得加成"}</small></p><b>{gameMode === "star-rush" ? liveScore : bestStreak}</b></div>
-            <div className="goal-row"><span className="goal-icon yellow">★</span><p><strong>{gameMode === "star-rush" ? "坚持到底" : "完成目标"}</strong><small>{gameMode === "star-rush" ? "倒计时结束自动结算" : `还剩 ${activePrompts.length - promptIndex} 组`}</small></p><b>{gameMode === "star-rush" ? `${timeLeft}s` : `${promptIndex}/${activePrompts.length}`}</b></div>
+            <div className="goal-row"><span className="goal-icon coral">⚡</span><p><strong>{isTimedMode ? "收集能量" : "连续命中"}</strong><small>{isTimedMode ? "按对越多守卫分越高" : "连续按对获得加成"}</small></p><b>{isTimedMode ? liveScore : bestStreak}</b></div>
+            <div className="goal-row"><span className="goal-icon yellow">★</span><p><strong>{isTimedMode ? "坚持到底" : "完成目标"}</strong><small>{isTimedMode ? "倒计时结束自动结算" : `还剩 ${activePrompts.length - promptIndex} 组`}</small></p><b>{isTimedMode ? `${timeLeft}s` : `${promptIndex}/${activePrompts.length}`}</b></div>
           </div>
           <div className="best-card"><span>🏆</span><p><small>{gameMode === "journey" ? "最快速度" : "小游戏最高分"}</small><strong>{gameMode === "journey" ? `${progress.bestWpm} WPM` : progress.arcadeBest[gameMode]}</strong></p></div>
           <div className="tiny-stats"><span><b>★ {progress.totalStars}</b>累计星星</span><span><b>{progress.completed.length}</b>已通关星球</span></div>

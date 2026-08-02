@@ -23,8 +23,11 @@ test("server-renders the complete typing product", async () => {
   assert.match(html, /<title>安琪打字机｜儿童趣味打字课<\/title>/i);
   assert.match(html, /安琪打字机/);
   assert.match(html, /起航信号/);
-  assert.match(html, /开始游戏/);
+  assert.match(html, /开始守卫/);
   assert.match(html, /今天去哪里/);
+  assert.match(html, /3D 星球守卫战/);
+  assert.match(html, /WEBGL 3D/);
+  assert.match(html, /键盘就是你的能量炮/);
   assert.match(html, /星路冒险/);
   assert.match(html, /30 秒星星雨/);
   assert.match(html, /泡泡派对/);
@@ -32,9 +35,10 @@ test("server-renders the complete typing product", async () => {
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton|Your site is taking shape/);
 });
 
-test("includes the essential learning, feedback, and persistence logic", async () => {
-  const [page, css, layout, packageJson] = await Promise.all([
+test("includes the essential 3D, learning, feedback, and persistence logic", async () => {
+  const [page, arena, css, layout, packageJson] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/TypingArena3D.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
@@ -52,6 +56,17 @@ test("includes the essential learning, feedback, and persistence logic", async (
   assert.match(page, /GAME_MODES\.map/);
   assert.match(page, /role="tablist"/);
   assert.match(page, /暂停并退出本局/);
+  assert.match(page, /TypingArena3D/);
+  assert.match(arena, /new THREE\.WebGLRenderer/);
+  assert.match(arena, /new THREE\.PerspectiveCamera/);
+  assert.match(arena, /new THREE\.CanvasTexture/);
+  assert.match(arena, /new THREE\.Line/);
+  assert.match(arena, /new THREE\.Points/);
+  assert.match(arena, /pointermove/);
+  assert.match(arena, /webglcontextlost/);
+  assert.match(arena, /轻量守卫模式/);
+  assert.match(arena, /prefers-reduced-motion/);
+  assert.match(css, /\.three-arena/);
   assert.match(css, /@media \(max-width:580px\)/);
   assert.match(css, /@media \(prefers-reduced-motion:\s*reduce\)/);
   assert.match(layout, /lang="zh-CN"/);
