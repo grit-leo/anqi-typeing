@@ -71,17 +71,21 @@ export default function Home() {
   const [progress, setProgress] = useState<GardenProgress>(DEFAULT_GARDEN_PROGRESS);
   const [soundOn, setSoundOn] = useState(true);
   const [reducedMotion, setReducedMotion] = useState(false);
+  const [beginnerMode, setBeginnerMode] = useState(true);
+  const [largeText, setLargeText] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [tutorialOpen, setTutorialOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [flash, setFlash] = useState<Flash>(null);
   const [toast, setToast] = useState("");
+  const [wrongStreak, setWrongStreak] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const startedAt = useRef(0);
   const finishingRef = useRef(false);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const finishTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const settingsResumeRef = useRef(false);
   const mobileInputRef = useRef<HTMLInputElement>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const sessionRef = useRef<SessionSnapshot>({ correctHits: 0, mistakes: 0, completedWords: 0, bestCombo: 0, elapsed: 0 });
@@ -93,6 +97,8 @@ export default function Home() {
   const timeLeft = Math.max(0, Math.ceil(level.duration - elapsed));
   const score = getLiveScore(level, correctHits, mistakes, completedWords, bestCombo);
   const accuracy = correctHits + mistakes === 0 ? 100 : Math.round((correctHits / (correctHits + mistakes)) * 100);
+  const accuracyLabel = correctHits + mistakes < 5 ? "正在热身" : `${accuracy}%`;
+  const calmSession = beginnerMode && levelIndex === 0;
   const questProgress = Math.min(100, Math.round((completedWords / level.targetWords) * 100));
   const isFever = combo >= 12;
   const playerLevel = getPlayerLevel(progress.xp);
@@ -191,12 +197,12 @@ export default function Home() {
     const timer = window.setInterval(() => {
       const nextElapsed = (Date.now() - startedAt.current) / 1000;
       setElapsed(nextElapsed);
-      if (nextElapsed >= level.duration) {
+      if (!calmSession && nextElapsed >= level.duration) {
         finishGame({ ...sessionRef.current, elapsed: level.duration });
       }
     }, 180);
     return () => window.clearInterval(timer);
-  }, [finishGame, level.duration, phase]);
+  }, [calmSession, finishGame, level.duration, phase]);
 
   const beginSession = useCallback(() => {
     setTyped("");
@@ -209,6 +215,7 @@ export default function Home() {
     setResult(null);
     setFlash(null);
     setToast("");
+    setWrongStreak(0);
     finishingRef.current = false;
     sessionRef.current = { correctHits: 0, mistakes: 0, completedWords: 0, bestCombo: 0, elapsed: 0 };
     startedAt.current = Date.now();
@@ -250,6 +257,20 @@ export default function Home() {
     setPhase("playing");
     window.setTimeout(() => mobileInputRef.current?.focus({ preventScroll: true }), 100);
   }, [elapsed]);
+
+  const openSettings = useCallback(() => {
+    settingsResumeRef.current = phase === "playing";
+    if (phase === "playing") pauseGame();
+    setSettingsOpen(true);
+  }, [pauseGame, phase]);
+
+  const closeSettings = useCallback(() => {
+    setSettingsOpen(false);
+    if (settingsResumeRef.current) {
+      settingsResumeRef.current = false;
+      window.setTimeout(resumeGame, 0);
+    }
+  }, [resumeGame]);
 
   const returnToLobby = useCallback(() => {
     if (finishTimer.current) clearTimeout(finishTimer.current);
@@ -293,6 +314,7 @@ export default function Home() {
       setCorrectHits(nextCorrect);
       setCombo(nextCombo);
       setBestCombo(nextBest);
+      setWrongStreak(0);
       playTone("key");
       showFlash("correct");
       if (nextCombo === 12) showToast("星愿时刻 · 魔力全开");
@@ -320,14 +342,25 @@ export default function Home() {
     } else if (outcome === "wrong") {
       setMistakes((current) => current + 1);
       setCombo(0);
+      setWrongStreak((current) => {
+        const next = current + 1;
+        if (next === 2) showToast(`慢一点，用正确手指找到 ${targetLabel}`);
+        if (next >= 3) showToast(`露米提示：先看高亮键 ${targetLabel}，按对再继续`);
+        return next;
+      });
       playTone("wrong");
       showFlash("wrong");
     }
-  }, [bestCombo, combo, completedWords, correctHits, finishGame, level.targetWords, mistakes, phase, playTone, reducedMotion, showFlash, showToast, target, typed, word]);
+  }, [bestCombo, combo, completedWords, correctHits, finishGame, level.targetWords, mistakes, phase, playTone, reducedMotion, showFlash, showToast, target, targetLabel, typed, word]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (settingsOpen && event.key === "Escape") {
+        event.preventDefault();
+        closeSettings();
+        return;
+      }
       const interactiveTarget = event.target instanceof HTMLElement && ["BUTTON", "INPUT", "A"].includes(event.target.tagName);
       if (phase === "lobby" && event.key === "Enter" && !tutorialOpen && !helpOpen && !settingsOpen && !interactiveTarget) {
         event.preventDefault();
@@ -345,7 +378,7 @@ export default function Home() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [handleKey, helpOpen, pauseGame, phase, requestStart, resumeGame, settingsOpen, tutorialOpen]);
+  }, [closeSettings, handleKey, helpOpen, pauseGame, phase, requestStart, resumeGame, settingsOpen, tutorialOpen]);
 
   useEffect(() => {
     const onVisibility = () => {
@@ -378,7 +411,7 @@ export default function Home() {
   };
 
   return (
-    <main className={`magic-game phase-${phase} level-${level.id} mission-${level.mission} ${flash ? `flash-${flash}` : ""} ${isFever ? "fever-mode" : ""}`}>
+    <main className={`magic-game phase-${phase} level-${level.id} mission-${level.mission} ${flash ? `flash-${flash}` : ""} ${isFever ? "fever-mode" : ""} ${largeText ? "child-text-large" : ""}`}>
       <MagicGarden3D
         phase={phase}
         worldIndex={level.worldIndex}
@@ -413,15 +446,17 @@ export default function Home() {
           {phase === "lobby" && <button className="help-action" onClick={() => setHelpOpen(true)} aria-label="查看玩法说明">?</button>}
           <button className="sound-action" onClick={() => setSoundOn((current) => !current)} aria-label={soundOn ? "关闭音效" : "打开音效"}>{soundOn ? "♫" : "♩"}</button>
           <button className="fullscreen-action" onClick={toggleFullscreen} aria-label={isFullscreen ? "退出全屏" : "进入全屏"}>{isFullscreen ? "↙" : "↗"}</button>
-          <button className="settings-action" onClick={() => setSettingsOpen((current) => !current)} aria-label="游戏设置">⚙</button>
+          <button className="settings-action" onClick={settingsOpen ? closeSettings : openSettings} aria-label="游戏设置">⚙</button>
         </div>
       </header>
 
       {settingsOpen && (
         <section className="settings-popover" aria-label="游戏设置">
-          <div><strong>游戏设置</strong><button onClick={() => setSettingsOpen(false)} aria-label="关闭设置">×</button></div>
+          <div><strong>儿童辅助设置</strong><button onClick={closeSettings} aria-label="关闭设置">×</button></div>
           <label><span>魔法音效<small>按键、连击和过关提示</small></span><input type="checkbox" checked={soundOn} onChange={(event) => setSoundOn(event.target.checked)} /></label>
           <label><span>柔和动画<small>减少镜头与粒子运动</small></span><input type="checkbox" checked={reducedMotion} onChange={(event) => setReducedMotion(event.target.checked)} /></label>
+          <label><span>轻松启蒙<small>第一关不倒计时，先学会再提速</small></span><input type="checkbox" checked={beginnerMode} onChange={(event) => setBeginnerMode(event.target.checked)} /></label>
+          <label><span>大字模式<small>放大提示和学习信息</small></span><input type="checkbox" checked={largeText} onChange={(event) => setLargeText(event.target.checked)} /></label>
         </section>
       )}
 
@@ -454,7 +489,7 @@ export default function Home() {
             <small>{missionName} · {completedWords < Math.ceil(level.targetWords / 2) ? "第一阶段" : completedWords < level.targetWords ? "最终阶段" : "任务完成"}</small>
           </div>
           <div className="session-hud">
-            <span><small>剩余时间</small><b className={timeLeft <= 10 ? "danger" : ""}>{timeLeft}<i>s</i></b></span>
+            <span><small>{calmSession ? "学习模式" : "剩余时间"}</small><b className={!calmSession && timeLeft <= 10 ? "danger" : ""}>{calmSession ? "∞" : timeLeft}{!calmSession && <i>s</i>}</b></span>
             <span><small>星愿积分</small><b>{score}</b></span>
             <button onClick={pauseGame} aria-label="暂停游戏">Ⅱ</button>
           </div>
@@ -471,13 +506,13 @@ export default function Home() {
             <div className="spell-meta">
               <span>下一键 <kbd>{targetLabel}</kbd></span>
               <div><i style={{ width: `${Math.round((typed.length / word.length) * 100)}%` }} /></div>
-              <span>准确率 <b>{accuracy}%</b></span>
+              <span>稳定度 <b>{accuracyLabel}</b></span>
             </div>
             <label className="mobile-type-box">
               <span>点这里打开手机键盘</span>
               <input ref={mobileInputRef} value="" onChange={(event) => handleKey(event.target.value.slice(-1))} autoCapitalize="none" autoCorrect="off" spellCheck={false} inputMode="text" aria-label="手机打字输入框" />
             </label>
-            <p className="desktop-hint"><i>F</i><i>J</i> 手指放在凸点上，直接输入高亮按键 <b>{targetLabel}</b></p>
+            <p className={`desktop-hint ${wrongStreak >= 2 ? "needs-help" : ""}`}><i>F</i><i>J</i> 食指先找到凸点，再慢慢输入高亮按键 <b>{targetLabel}</b></p>
           </div>
           {flash === "word" && <div className="word-burst" aria-live="polite">PERFECT SPELL <span>✦</span></div>}
           {toast && <div className="game-toast" aria-live="polite">{toast}</div>}
@@ -485,7 +520,7 @@ export default function Home() {
         </section>
       )}
 
-      {phase === "paused" && (
+      {phase === "paused" && !settingsOpen && (
         <section className="modal-backdrop" role="dialog" aria-modal="true" aria-label="游戏已暂停">
           <div className="pause-card modal-card">
             <span className="modal-orbit">☾</span><small>TAKE A LITTLE BREAK</small><h2>魔法暂停中</h2><p>花灵会在这里等你，休息好再继续。</p>
@@ -522,11 +557,11 @@ export default function Home() {
             <button className="modal-close" onClick={() => setTutorialOpen(false)} aria-label="关闭新手魔法课">×</button>
             <span className="tutorial-badge">露米的 30 秒魔法课</span><h2>三个动作，花园就会发光</h2>
             <div className="tutorial-steps">
-              <span><i>01</i><b>看咒语</b><small>找到花灵上方发光的英文单词</small></span>
-              <span><i>02</i><b>直接输入</b><small>不用点输入框，照着字母连续打字</small></span>
-              <span><i>03</i><b>保持连击</b><small>越准确，魔杖光束和奖励越闪耀</small></span>
+              <span><i>01</i><b>坐稳放松</b><small>背部自然挺直，肩膀和手腕都放松</small></span>
+              <span><i>02</i><b>找到 F 和 J</b><small>左右食指轻放在两个有凸点的按键上</small></span>
+              <span><i>03</i><b>慢慢按对</b><small>看高亮键，用提示的手指轻轻按下</small></span>
             </div>
-            <p>打错不会扣生命，也不用删除，重新按正确字母就好。</p>
+            <p>第一关没有倒计时。打错不会扣生命，露米会陪你重新找到正确按键。</p>
             <button className="modal-primary" onClick={completeTutorial}>我准备好啦 <span>→</span></button>
           </div>
         </section>

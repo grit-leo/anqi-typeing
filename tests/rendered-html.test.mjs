@@ -64,8 +64,11 @@ test("includes real WebGL, large-game systems, touch input, safety and persisten
   assert.match(page, /aria-live="assertive"/);
   assert.match(page, /phase === "paused"/);
   assert.match(page, /phase === "complete"/);
-  assert.match(page, /不用点输入框/);
+  assert.match(page, /找到 F 和 J/);
   assert.match(page, /不扣生命/);
+  assert.match(page, /轻松启蒙/);
+  assert.match(page, /settingsResumeRef/);
+  assert.match(page, /正在热身/);
   assert.match(page, /claimDailyReward/);
   assert.match(page, /buyOrEquipCosmetic/);
 
