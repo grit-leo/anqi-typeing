@@ -114,9 +114,10 @@ export function MagicGarden3D(props: MagicGarden3DProps) {
       return;
     }
 
+    const lightweight = window.innerWidth < 800 || (navigator.hardwareConcurrency ?? 8) <= 4;
     let renderer: THREE.WebGLRenderer;
     try {
-      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: "high-performance" });
+      renderer = new THREE.WebGLRenderer({ antialias: !lightweight, alpha: false, powerPreference: "high-performance" });
     } catch {
       window.requestAnimationFrame(() => setFallback(true));
       return;
@@ -131,12 +132,12 @@ export function MagicGarden3D(props: MagicGarden3DProps) {
       glow: new THREE.Color(palette.glow),
       magic: new THREE.Color(palette.magic),
     }));
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.55));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, lightweight ? 1.15 : 1.45));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.16;
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.enabled = !lightweight;
+    renderer.shadowMap.type = THREE.PCFShadowMap;
     renderer.domElement.className = "garden-canvas";
     renderer.domElement.setAttribute("aria-hidden", "true");
     mount.appendChild(renderer.domElement);
@@ -175,7 +176,7 @@ export function MagicGarden3D(props: MagicGarden3DProps) {
     moonHalo.position.copy(moon.position);
     scene.add(moonHalo);
 
-    const starCount = 680;
+    const starCount = lightweight ? 380 : 680;
     const starPositions = new Float32Array(starCount * 3);
     const starColors = new Float32Array(starCount * 3);
     for (let index = 0; index < starCount; index += 1) {
@@ -452,6 +453,7 @@ export function MagicGarden3D(props: MagicGarden3DProps) {
     wordSprite.position.set(0, 1.28, 0);
     wordSprite.scale.set(5.5, 1.6, 1);
     wordSprite.renderOrder = 10;
+    wordSprite.visible = !lightweight;
     wisp.add(wordSprite);
 
     const backgroundWisps: THREE.Group[] = [];
@@ -472,7 +474,7 @@ export function MagicGarden3D(props: MagicGarden3DProps) {
     const beam = new THREE.Line(beamGeometry, beamMaterial);
     scene.add(beam);
 
-    const burstCount = 86;
+    const burstCount = lightweight ? 48 : 86;
     const burstPositions = new Float32Array(burstCount * 3);
     const burstDirections = new Float32Array(burstCount * 3);
     for (let index = 0; index < burstCount; index += 1) {
@@ -490,7 +492,7 @@ export function MagicGarden3D(props: MagicGarden3DProps) {
     burst.visible = false;
     scene.add(burst);
 
-    const fireflyCount = 92;
+    const fireflyCount = lightweight ? 52 : 92;
     const fireflyPositions = new Float32Array(fireflyCount * 3);
     for (let index = 0; index < fireflyCount; index += 1) {
       fireflyPositions[index * 3] = (random() - 0.5) * 18;
@@ -506,8 +508,9 @@ export function MagicGarden3D(props: MagicGarden3DProps) {
     const pointerCurrent = new THREE.Vector2();
     const cameraTarget = new THREE.Vector3(0, 1.05, -1.8);
     const bloomScaleTarget = new THREE.Vector3(1, 1, 1);
-    const clock = new THREE.Clock();
     let frame = 0;
+    let lastFrameTime = performance.now();
+    let elapsedTime = 0;
     let visible = true;
     let lastWord = liveRef.current.word;
     let lastTyped = liveRef.current.typedLength;
@@ -553,8 +556,11 @@ export function MagicGarden3D(props: MagicGarden3DProps) {
     const animate = () => {
       frame = window.requestAnimationFrame(animate);
       if (!visible || document.hidden) return;
-      const delta = Math.min(clock.getDelta(), 0.05);
-      const time = clock.elapsedTime;
+      const now = performance.now();
+      const delta = Math.min((now - lastFrameTime) / 1000, 0.05);
+      lastFrameTime = now;
+      elapsedTime += delta;
+      const time = elapsedTime;
       const live = liveRef.current;
       const motionOff = live.reducedMotion || systemReducedMotion;
       const palette = paletteColors[live.worldIndex] ?? paletteColors[0];

@@ -79,6 +79,9 @@ test("includes real WebGL, large-game systems, touch input, safety and persisten
   assert.match(page, /migrateGardenProgress/);
   assert.match(page, /parentHoldTimer/);
   assert.match(page, /按住 2 秒进入/);
+  assert.match(page, /anqi-magic-garden-settings/);
+  assert.match(page, /highContrast/);
+  assert.match(page, /lazy\(\(\) => import\("\.\/MagicGarden3D"\)/);
 
   assert.match(hub, /GARDEN_WORLDS/);
   assert.match(hub, /GARDEN_LEVELS/);
@@ -111,6 +114,8 @@ test("includes real WebGL, large-game systems, touch input, safety and persisten
   assert.match(stage, /garden-stage-fallback/);
   assert.match(stage, /rhythmRings/);
   assert.match(stage, /guardianCrown/);
+  assert.match(stage, /lightweight/);
+  assert.doesNotMatch(stage, /THREE\.Clock|PCFSoftShadowMap/);
   assert.match(engine, /targetWords/);
   assert.match(engine, /bestScores/);
   assert.match(engine, /GardenWorldId/);
@@ -131,10 +136,12 @@ test("includes real WebGL, large-game systems, touch input, safety and persisten
   assert.match(css, /\.adventure-hub/);
   assert.match(css, /\.stage-route/);
   assert.match(css, /\.parent-report-card/);
+  assert.match(css, /\.high-contrast \.coach-key\.target/);
   assert.match(css, /@media \(max-width:800px\)/);
   assert.match(css, /@media \(prefers-reduced-motion:reduce\)/);
-  assert.match(css, /og-v4\.png/);
-  assert.doesNotMatch(layout, /og:image|images:/);
+  assert.match(css, /og-v5\.jpg/);
+  assert.match(layout, /og-v5\.jpg/);
+  assert.match(layout, /summary_large_image/);
   assert.match(layout, /lang="zh-CN"/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
 });

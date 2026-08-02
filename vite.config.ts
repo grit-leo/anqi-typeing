@@ -44,6 +44,11 @@ export default defineConfig(async () => {
   const { cloudflare } = await import("@cloudflare/vite-plugin");
 
   return {
+    build: {
+      // Three.js is intentionally isolated in a lazy WebGL chunk; the initial
+      // lobby bundle stays small and loads the 3D scene only when play begins.
+      chunkSizeWarningLimit: 650,
+    },
     server: isCodexSeatbeltSandbox
       ? { watch: { useFsEvents: false, usePolling: true } }
       : undefined,

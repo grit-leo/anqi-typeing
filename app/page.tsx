@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   applyGardenResult,
   buyOrEquipCosmetic,
@@ -26,8 +26,9 @@ import {
 } from "./game-engine";
 import { AdventureHub } from "./AdventureHub";
 import { KeyboardCoach } from "./KeyboardCoach";
-import { MagicGarden3D } from "./MagicGarden3D";
 import { ParentReport } from "./ParentReport";
+
+const MagicGarden3D = lazy(() => import("./MagicGarden3D").then((module) => ({ default: module.MagicGarden3D })));
 
 type Phase = "lobby" | "playing" | "paused" | "complete";
 type Flash = "correct" | "wrong" | "word" | null;
@@ -35,6 +36,7 @@ type SessionSnapshot = { correctHits: number; mistakes: number; completedWords: 
 
 const PROGRESS_KEY = "anqi-magic-garden-progress";
 const TUTORIAL_KEY = "anqi-magic-garden-tutorial";
+const SETTINGS_KEY = "anqi-magic-garden-settings";
 
 function loadProgress(): GardenProgress {
   try {
@@ -74,6 +76,8 @@ export default function Home() {
   const [reducedMotion, setReducedMotion] = useState(false);
   const [beginnerMode, setBeginnerMode] = useState(true);
   const [largeText, setLargeText] = useState(false);
+  const [highContrast, setHighContrast] = useState(false);
+  const [settingsHydrated, setSettingsHydrated] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [tutorialOpen, setTutorialOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -127,7 +131,18 @@ export default function Home() {
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
       setProgress(loadProgress());
-      setReducedMotion(window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+      const systemReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      try {
+        const saved = JSON.parse(window.localStorage.getItem(SETTINGS_KEY) ?? "{}") as Partial<{ soundOn: boolean; reducedMotion: boolean; beginnerMode: boolean; largeText: boolean; highContrast: boolean }>;
+        setSoundOn(saved.soundOn ?? true);
+        setReducedMotion(saved.reducedMotion ?? systemReducedMotion);
+        setBeginnerMode(saved.beginnerMode ?? true);
+        setLargeText(saved.largeText ?? false);
+        setHighContrast(saved.highContrast ?? false);
+      } catch {
+        setReducedMotion(systemReducedMotion);
+      }
+      setSettingsHydrated(true);
     });
     const onFullscreen = () => setIsFullscreen(Boolean(document.fullscreenElement));
     document.addEventListener("fullscreenchange", onFullscreen);
@@ -136,6 +151,15 @@ export default function Home() {
       document.removeEventListener("fullscreenchange", onFullscreen);
     };
   }, []);
+
+  useEffect(() => {
+    if (!settingsHydrated) return;
+    try {
+      window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ soundOn, reducedMotion, beginnerMode, largeText, highContrast }));
+    } catch {
+      // Accessibility preferences still apply to the current session.
+    }
+  }, [beginnerMode, highContrast, largeText, reducedMotion, settingsHydrated, soundOn]);
 
   useEffect(() => {
     sessionRef.current = { correctHits, mistakes, completedWords, bestCombo, elapsed };
@@ -439,6 +463,11 @@ export default function Home() {
         closeSettings();
         return;
       }
+      if (parentReportOpen && event.key === "Escape") {
+        event.preventDefault();
+        setParentReportOpen(false);
+        return;
+      }
       const interactiveTarget = event.target instanceof HTMLElement && ["BUTTON", "INPUT", "A"].includes(event.target.tagName);
       if (phase === "lobby" && event.key === "Enter" && !tutorialOpen && !helpOpen && !settingsOpen && !interactiveTarget) {
         event.preventDefault();
@@ -456,7 +485,7 @@ export default function Home() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [closeSettings, handleKey, helpOpen, pauseGame, phase, requestStart, resumeGame, settingsOpen, tutorialOpen]);
+  }, [closeSettings, handleKey, helpOpen, parentReportOpen, pauseGame, phase, requestStart, resumeGame, settingsOpen, tutorialOpen]);
 
   useEffect(() => {
     const onVisibility = () => {
@@ -502,20 +531,24 @@ export default function Home() {
   };
 
   return (
-    <main className={`magic-game phase-${phase} level-${level.id} mission-${level.mission} ${flash ? `flash-${flash}` : ""} ${isFever ? "fever-mode" : ""} ${largeText ? "child-text-large" : ""}`}>
-      <MagicGarden3D
-        phase={phase}
-        worldIndex={level.worldIndex}
-        mission={level.mission}
-        cosmeticColor={equippedCosmetic.color}
-        word={word}
-        typedLength={typed.length}
-        correctHits={correctHits}
-        mistakes={mistakes}
-        completedWords={completedWords}
-        combo={combo}
-        reducedMotion={reducedMotion}
-      />
+    <main className={`magic-game phase-${phase} level-${level.id} mission-${level.mission} ${flash ? `flash-${flash}` : ""} ${isFever ? "fever-mode" : ""} ${largeText ? "child-text-large" : ""} ${highContrast ? "high-contrast" : ""}`}>
+      {phase === "lobby" ? <div className="garden-stage lobby-scene-fallback" aria-hidden="true" /> : (
+        <Suspense fallback={<div className="garden-stage garden-loading" aria-hidden="true"><span>✦</span></div>}>
+          <MagicGarden3D
+            phase={phase}
+            worldIndex={level.worldIndex}
+            mission={level.mission}
+            cosmeticColor={equippedCosmetic.color}
+            word={word}
+            typedLength={typed.length}
+            correctHits={correctHits}
+            mistakes={mistakes}
+            completedWords={completedWords}
+            combo={combo}
+            reducedMotion={reducedMotion}
+          />
+        </Suspense>
+      )}
       <div className="cinematic-vignette" aria-hidden="true" />
       <div className="petal petal-a" aria-hidden="true" /><div className="petal petal-b" aria-hidden="true" /><div className="petal petal-c" aria-hidden="true" />
 
@@ -548,6 +581,7 @@ export default function Home() {
           <label><span>柔和动画<small>减少镜头与粒子运动</small></span><input type="checkbox" checked={reducedMotion} onChange={(event) => setReducedMotion(event.target.checked)} /></label>
           <label><span>轻松启蒙<small>第一关不倒计时，先学会再提速</small></span><input type="checkbox" checked={beginnerMode} onChange={(event) => setBeginnerMode(event.target.checked)} /></label>
           <label><span>大字模式<small>放大提示和学习信息</small></span><input type="checkbox" checked={largeText} onChange={(event) => setLargeText(event.target.checked)} /></label>
+          <label><span>高对比按键<small>增强目标键、文字与焦点边界</small></span><input type="checkbox" checked={highContrast} onChange={(event) => setHighContrast(event.target.checked)} /></label>
           <button
             type="button"
             className="parent-access"
