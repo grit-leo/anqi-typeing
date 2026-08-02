@@ -20,8 +20,8 @@ test("server-renders the complete typing product", async () => {
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
-  assert.match(html, /<title>键盘探险队｜儿童趣味打字课<\/title>/i);
-  assert.match(html, /键盘探险队/);
+  assert.match(html, /<title>安琪打字机｜儿童趣味打字课<\/title>/i);
+  assert.match(html, /安琪打字机/);
   assert.match(html, /起航信号/);
   assert.match(html, /开始任务/);
   assert.match(html, /星球课程/);
@@ -41,6 +41,7 @@ test("includes the essential learning, feedback, and persistence logic", async (
   assert.match(page, /handleKey\(" "\)/);
   assert.match(page, /sessionAccuracy/);
   assert.match(page, /finalWpm/);
+  assert.match(page, /anqi-typer-progress/);
   assert.match(page, /key-quest-progress/);
   assert.match(page, /prefers-reduced-motion|sr-only/);
   assert.match(page, /aria-live="assertive"/);

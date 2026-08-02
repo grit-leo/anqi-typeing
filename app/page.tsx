@@ -130,7 +130,8 @@ const FINGER_GROUPS: Record<string, { finger: string; hand: "左手" | "右手" 
 
 function safeLoadProgress(): Progress {
   try {
-    const saved = window.localStorage.getItem("key-quest-progress");
+    const saved = window.localStorage.getItem("anqi-typer-progress") ??
+      window.localStorage.getItem("key-quest-progress");
     return saved ? { ...DEFAULT_PROGRESS, ...JSON.parse(saved) } : DEFAULT_PROGRESS;
   } catch {
     return DEFAULT_PROGRESS;
@@ -228,7 +229,7 @@ export default function Home() {
         totalStars: current.totalStars + finalResult.stars,
       };
       try {
-        window.localStorage.setItem("key-quest-progress", JSON.stringify(next));
+        window.localStorage.setItem("anqi-typer-progress", JSON.stringify(next));
       } catch {
         // Progress still works for this session when storage is unavailable.
       }
@@ -337,9 +338,9 @@ export default function Home() {
       <div className="sky-dot dot-one" />
       <div className="sky-dot dot-two" />
       <header className="topbar">
-        <div className="brand" aria-label="键盘探险队首页">
+        <div className="brand" aria-label="安琪打字机首页">
           <span className="brand-planet"><span /></span>
-          <div><strong>键盘探险队</strong><small>KEY QUEST</small></div>
+          <div><strong>安琪打字机</strong><small>ANQI TYPER</small></div>
         </div>
         <div className="top-progress">
           <span className="level-pill">等级 {Math.floor(progress.xp / 200) + 1}</span>
