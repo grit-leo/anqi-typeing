@@ -10,6 +10,7 @@ import {
   getLocalDateKey,
   getPlayerLevel,
   getPlayerLevelProgress,
+  getLevelMastery,
   type GardenProgress,
   type MissionType,
 } from "./game-engine";
@@ -46,6 +47,7 @@ export function AdventureHub({ progress, levelIndex, onChooseLevel, onStart, onC
   const worldLevels = useMemo(() => GARDEN_LEVELS.map((level, index) => ({ level, index })).filter(({ level }) => level.worldIndex === worldIndex), [worldIndex]);
   const world = GARDEN_WORLDS[worldIndex];
   const unlockedAchievements = new Set(progress.achievements);
+  const selectedMastery = getLevelMastery(GARDEN_LEVELS[levelIndex], progress.keyMastery);
 
   const chooseWorld = (index: number) => {
     const firstLevelIndex = index * 3;
@@ -99,7 +101,7 @@ export function AdventureHub({ progress, levelIndex, onChooseLevel, onStart, onC
             </div>
 
             <div className="selected-mission">
-              <span><i>{MISSION_COPY[GARDEN_LEVELS[levelIndex].mission].icon}</i><small>当前任务</small><strong>{GARDEN_LEVELS[levelIndex].goal}</strong></span>
+              <span><i>{MISSION_COPY[GARDEN_LEVELS[levelIndex].mission].icon}</i><small>{GARDEN_LEVELS[levelIndex].lesson} · 掌握度 {selectedMastery}%</small><strong>{GARDEN_LEVELS[levelIndex].goal}</strong></span>
               <button onClick={onStart}>进入关卡 <b>→</b></button>
             </div>
           </div>

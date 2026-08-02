@@ -29,8 +29,22 @@ export type GardenLevel = {
   duration: number;
   accent: string;
   difficulty: number;
+  newKeys: readonly string[];
+  learnedKeys: readonly string[];
+  lesson: string;
   words: readonly string[];
 };
+
+export type KeyMastery = {
+  attempts: number;
+  correct: number;
+  streak: number;
+  score: number;
+};
+
+export type SessionKeyStat = { attempts: number; correct: number; bestStreak: number };
+export type SessionKeyStats = Record<string, SessionKeyStat>;
+export type LessonAct = "learn" | "practice" | "adventure";
 
 export type GardenResult = {
   accuracy: number;
@@ -50,6 +64,7 @@ export type DailyProgress = {
 };
 
 export type GardenProgress = {
+  schemaVersion: 2;
   unlocked: number;
   totalStars: number;
   petals: number;
@@ -60,6 +75,7 @@ export type GardenProgress = {
   ownedCosmetics: string[];
   equippedCosmetic: string;
   daily: DailyProgress;
+  keyMastery: Record<string, KeyMastery>;
 };
 
 export type Cosmetic = {
@@ -87,52 +103,64 @@ export const GARDEN_WORLDS: readonly GardenWorld[] = [
 
 export const GARDEN_LEVELS: readonly GardenLevel[] = [
   {
-    id: "petal-gate", worldId: "blossom-vale", worldIndex: 0, mission: "bloom", chapter: "1-1", title: "花瓣启程", story: "让沉睡的花朵重新记起自己的名字", goal: "唤醒 10 朵星愿花", targetWords: 10, duration: 90, accent: "#ff8eb5", difficulty: 1,
-    words: ["star", "moon", "rose", "glow", "wish", "magic", "bloom", "fairy", "happy", "dream"],
+    id: "petal-gate", worldId: "blossom-vale", worldIndex: 0, mission: "bloom", chapter: "1-1", title: "花瓣启程", story: "让左右食指找到键盘上的两个小凸点", goal: "完成 8 组 F/J 定位魔法", targetWords: 8, duration: 90, accent: "#ff8eb5", difficulty: 1,
+    newKeys: ["f", "j"], learnedKeys: ["f", "j"], lesson: "左右食指定位",
+    words: ["fff", "jjj", "fjf", "jfj", "ffj", "jjf", "fjj", "jff"],
   },
   {
-    id: "firefly-post", worldId: "blossom-vale", worldIndex: 0, mission: "firefly", chapter: "1-2", title: "萤火邮差", story: "赶在日落前，把花语信送到每一座蘑菇屋", goal: "送出 11 封萤火信", targetWords: 11, duration: 85, accent: "#ffb868", difficulty: 1,
-    words: ["letter", "honey", "garden", "little", "yellow", "butter", "sunny", "smile", "basket", "picnic", "friend"],
+    id: "firefly-post", worldId: "blossom-vale", worldIndex: 0, mission: "firefly", chapter: "1-2", title: "萤火邮差", story: "学习主键行两侧的花语按键", goal: "送出 10 封主键行萤火信", targetWords: 10, duration: 95, accent: "#ffb868", difficulty: 1,
+    newKeys: ["a", "s", "d", "k", "l"], learnedKeys: ["a", "s", "d", "f", "j", "k", "l"], lesson: "主键行两侧",
+    words: ["sad", "dad", "ask", "fall", "flask", "salad", "lad", "all", "lass", "adds"],
   },
   {
-    id: "rose-guardian", worldId: "blossom-vale", worldIndex: 0, mission: "guardian", chapter: "1-3", title: "蔷薇守门人", story: "用准确的咒语解除蔷薇迷宫的三重结界", goal: "击破 12 层蔷薇结界", targetWords: 12, duration: 100, accent: "#f56e9e", difficulty: 2,
-    words: ["petals", "secret", "lovely", "summer", "gentle", "promise", "sparkle", "cottage", "morning", "forever", "welcome", "courage"],
+    id: "rose-guardian", worldId: "blossom-vale", worldIndex: 0, mission: "guardian", chapter: "1-3", title: "蔷薇守门人", story: "用 G/H 连接左右手，守护完整主键行", goal: "击破 10 层主键行结界", targetWords: 10, duration: 110, accent: "#f56e9e", difficulty: 2,
+    newKeys: ["g", "h"], learnedKeys: ["a", "s", "d", "f", "g", "h", "j", "k", "l"], lesson: "完整主键行",
+    words: ["dash", "flash", "glass", "flag", "half", "shall", "glad", "salad", "hash", "gash"],
   },
   {
-    id: "crystal-ripple", worldId: "moon-lake", worldIndex: 1, mission: "rhythm", chapter: "2-1", title: "水晶涟漪", story: "跟着湖面节拍，让每个字母落在月光上", goal: "奏响 12 段水晶旋律", targetWords: 12, duration: 95, accent: "#89b8ff", difficulty: 2,
-    words: ["silver", "ripple", "violet", "mirror", "melody", "crystal", "twinkle", "gentle", "wonder", "feather", "whisper", "evening"],
+    id: "crystal-ripple", worldId: "moon-lake", worldIndex: 1, mission: "rhythm", chapter: "2-1", title: "水晶涟漪", story: "从主键行伸向最容易找到的 E/I", goal: "奏响 10 段 E/I 水晶旋律", targetWords: 10, duration: 105, accent: "#89b8ff", difficulty: 2,
+    newKeys: ["e", "i"], learnedKeys: ["a", "s", "d", "f", "g", "h", "j", "k", "l", "e", "i"], lesson: "上排第一步",
+    words: ["see", "feel", "life", "idea", "side", "file", "hide", "like", "kiss", "sea"],
   },
   {
-    id: "moon-ball", worldId: "moon-lake", worldIndex: 1, mission: "firefly", chapter: "2-2", title: "月光舞会", story: "为月光精灵点亮通往舞会的萤火小径", goal: "点亮 13 盏月光灯", targetWords: 13, duration: 95, accent: "#9b8cff", difficulty: 2,
-    words: ["ribbon", "dancing", "lantern", "velvet", "starlit", "graceful", "diamond", "festival", "midnight", "glimmer", "harmony", "partner", "delight"],
+    id: "moon-ball", worldId: "moon-lake", worldIndex: 1, mission: "firefly", chapter: "2-2", title: "月光舞会", story: "让手指向上轻移，点亮 R/U/W/O", goal: "点亮 10 盏上排月光灯", targetWords: 10, duration: 105, accent: "#9b8cff", difficulty: 2,
+    newKeys: ["r", "u", "w", "o"], learnedKeys: ["a", "s", "d", "f", "g", "h", "j", "k", "l", "e", "i", "r", "u", "w", "o"], lesson: "上排伸展",
+    words: ["rose", "word", "flower", "world", "house", "wish", "soul", "doll", "owl", "row"],
   },
   {
-    id: "sleeping-swan", worldId: "moon-lake", worldIndex: 1, mission: "guardian", chapter: "2-3", title: "沉睡天鹅", story: "穿过迷雾，唤醒守护月湖的银翼天鹅", goal: "净化 14 枚迷雾音符", targetWords: 14, duration: 105, accent: "#b49cff", difficulty: 3,
-    words: ["moonbeam", "serenade", "luminous", "sapphire", "enchanted", "elegance", "reflection", "beautiful", "symphony", "peaceful", "guardian", "awakening", "radiant", "moonlight"],
+    id: "sleeping-swan", worldId: "moon-lake", worldIndex: 1, mission: "guardian", chapter: "2-3", title: "沉睡天鹅", story: "学会 Q/T/Y/P，完成整个上排键位", goal: "净化 10 枚上排迷雾音符", targetWords: 10, duration: 115, accent: "#b49cff", difficulty: 3,
+    newKeys: ["q", "t", "y", "p"], learnedKeys: ["q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "a", "s", "d", "f", "g", "h", "j", "k", "l"], lesson: "完整上排",
+    words: ["quiet", "type", "pretty", "power", "party", "story", "yellow", "purple", "queen", "tower"],
   },
   {
-    id: "cloud-station", worldId: "cloud-kingdom", worldIndex: 2, mission: "bloom", chapter: "3-1", title: "云朵车站", story: "修好会飞的打字车票，搭上前往王城的列车", goal: "打印 14 张云端车票", targetWords: 14, duration: 100, accent: "#70cfee", difficulty: 3,
-    words: ["cloud", "ticket", "travel", "breeze", "window", "station", "journey", "luggage", "captain", "floating", "sunrise", "airship", "compass", "arrive"],
+    id: "cloud-station", worldId: "cloud-kingdom", worldIndex: 2, mission: "bloom", chapter: "3-1", title: "云朵车站", story: "从主键行向下找到 V/M", goal: "打印 10 张 V/M 云端车票", targetWords: 10, duration: 110, accent: "#70cfee", difficulty: 3,
+    newKeys: ["v", "m"], learnedKeys: ["q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "a", "s", "d", "f", "g", "h", "j", "k", "l", "v", "m"], lesson: "下排第一步",
+    words: ["move", "moon", "dream", "smile", "magic", "river", "warm", "movie", "summer", "velvet"],
   },
   {
-    id: "rainbow-library", worldId: "cloud-kingdom", worldIndex: 2, mission: "rhythm", chapter: "3-2", title: "彩虹图书馆", story: "输入完整短句，让散落的故事重新飞回书页", goal: "修复 12 页彩虹故事", targetWords: 12, duration: 115, accent: "#7fdcc8", difficulty: 4,
-    words: ["magic book", "bright sky", "kind heart", "tiny dragon", "silver key", "rainbow road", "brave friend", "flying castle", "secret story", "wonder grows", "dreams begin", "we shine"],
+    id: "rainbow-library", worldId: "cloud-kingdom", worldIndex: 2, mission: "rhythm", chapter: "3-2", title: "彩虹图书馆", story: "继续向下找到 C/N/X/B", goal: "修复 10 页下排键故事", targetWords: 10, duration: 120, accent: "#7fdcc8", difficulty: 4,
+    newKeys: ["c", "n", "x", "b"], learnedKeys: ["q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "a", "s", "d", "f", "g", "h", "j", "k", "l", "c", "v", "b", "n", "m", "x"], lesson: "下排伸展",
+    words: ["bunny", "cloud", "dance", "crown", "box", "next", "candy", "ocean", "brave", "crystal"],
   },
   {
-    id: "storm-queen", worldId: "cloud-kingdom", worldIndex: 2, mission: "guardian", chapter: "3-3", title: "风暴女王", story: "保持节奏与准确，平息笼罩王城的雷云", goal: "击破 15 枚风暴核心", targetWords: 15, duration: 120, accent: "#62bfe9", difficulty: 4,
-    words: ["thunder", "powerful", "kingdom", "adventure", "lightning", "together", "fearless", "victory", "skyward", "champion", "protect", "believe", "bravery", "freedom", "sunlight"],
+    id: "storm-queen", worldId: "cloud-kingdom", worldIndex: 2, mission: "guardian", chapter: "3-3", title: "风暴女王", story: "找到最后的 Z，掌握完整字母区", goal: "击破 10 枚全字母风暴核心", targetWords: 10, duration: 125, accent: "#62bfe9", difficulty: 4,
+    newKeys: ["z"], learnedKeys: ["q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "a", "s", "d", "f", "g", "h", "j", "k", "l", "z", "x", "c", "v", "b", "n", "m"], lesson: "完整字母区",
+    words: ["amazing", "puzzle", "breeze", "wizard", "jazz", "frozen", "zigzag", "prize", "sparkle", "adventure"],
   },
   {
-    id: "aurora-whisper", worldId: "aurora-temple", worldIndex: 3, mission: "firefly", chapter: "4-1", title: "极光秘语", story: "追上极光精灵，收集散落在夜空的古老文字", goal: "捕捉 15 枚极光符文", targetWords: 15, duration: 110, accent: "#66e0c9", difficulty: 4,
-    words: ["aurora", "emerald", "starlight", "northern", "mystery", "celestial", "glacier", "shimmer", "destiny", "infinite", "horizon", "whisper", "comet", "cosmic", "radiance"],
+    id: "aurora-whisper", worldId: "aurora-temple", worldIndex: 3, mission: "firefly", chapter: "4-1", title: "极光秘语", story: "学会用拇指敲空格，把单词连接成短语", goal: "捕捉 10 组空格极光符文", targetWords: 10, duration: 120, accent: "#66e0c9", difficulty: 4,
+    newKeys: ["space"], learnedKeys: ["q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "a", "s", "d", "f", "g", "h", "j", "k", "l", "z", "x", "c", "v", "b", "n", "m", "space"], lesson: "拇指与空格",
+    words: ["magic book", "bright sky", "kind heart", "tiny dragon", "silver key", "rainbow road", "brave friend", "dream big", "we shine", "keep going"],
   },
   {
-    id: "wish-corridor", worldId: "aurora-temple", worldIndex: 3, mission: "rhythm", chapter: "4-2", title: "星愿回廊", story: "写下属于自己的勇气短句，开启圣殿大门", goal: "完成 14 条星愿誓言", targetWords: 14, duration: 125, accent: "#67d8d0", difficulty: 5,
-    words: ["i am brave", "i choose kind", "dream big", "keep going", "we can shine", "trust yourself", "create magic", "follow the stars", "my heart glows", "friends are power", "wonder is near", "i will learn", "make a wish", "light the way"],
+    id: "wish-corridor", worldId: "aurora-temple", worldIndex: 3, mission: "rhythm", chapter: "4-2", title: "星愿回廊", story: "左右小指配合 Shift，点亮句子开头", goal: "完成 10 条大写星愿誓言", targetWords: 10, duration: 135, accent: "#67d8d0", difficulty: 5,
+    newKeys: ["shift"], learnedKeys: ["q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "a", "s", "d", "f", "g", "h", "j", "k", "l", "z", "x", "c", "v", "b", "n", "m", "space", "shift"], lesson: "Shift 与大写",
+    words: ["Magic Garden", "Brave Friend", "Dream Big", "Keep Going", "We Can Shine", "Kind Heart", "Bright Sky", "Follow Stars", "Create Magic", "I Will Learn"],
   },
   {
-    id: "eternal-crown", worldId: "aurora-temple", worldIndex: 3, mission: "guardian", chapter: "4-3", title: "永恒花冠", story: "集结四界花灵，完成最后的守护者试炼", goal: "净化 16 层永恒结界", targetWords: 16, duration: 135, accent: "#ffd16d", difficulty: 5,
-    words: ["constellation", "extraordinary", "imagination", "determination", "celebration", "magnificent", "friendship", "confidence", "kindness wins", "believe in magic", "we grow together", "courage shines", "protect our garden", "dreams have power", "write your story", "forever blooming"],
+    id: "eternal-crown", worldId: "aurora-temple", worldIndex: 3, mission: "guardian", chapter: "4-3", title: "永恒花冠", story: "加入逗号、句号和撇号，写下完整的花园故事", goal: "净化 10 层标点永恒结界", targetWords: 10, duration: 145, accent: "#ffd16d", difficulty: 5,
+    newKeys: ["comma", "period", "apostrophe"], learnedKeys: ["q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "a", "s", "d", "f", "g", "h", "j", "k", "l", "z", "x", "c", "v", "b", "n", "m", "space", "shift", "comma", "period", "apostrophe"], lesson: "完整句子",
+    words: ["Hello, garden.", "I'm brave.", "Let's grow.", "Magic is here.", "We can shine.", "Dreams have power.", "Kindness wins.", "I'll keep going.", "Write your story.", "Forever blooming."],
   },
 ] as const;
 
@@ -172,6 +200,7 @@ export function getDailyTarget(dateKey: string): number {
 }
 
 export const DEFAULT_GARDEN_PROGRESS: GardenProgress = {
+  schemaVersion: 2,
   unlocked: 1,
   totalStars: 0,
   petals: 0,
@@ -182,7 +211,32 @@ export const DEFAULT_GARDEN_PROGRESS: GardenProgress = {
   ownedCosmetics: ["violet-wand"],
   equippedCosmetic: "violet-wand",
   daily: { date: "", words: 0, sessions: 0, claimed: false },
+  keyMastery: {},
 };
+
+export function getLessonAct(level: GardenLevel, completedWords: number): LessonAct {
+  const ratio = completedWords / Math.max(1, level.targetWords);
+  return ratio < 0.3 ? "learn" : ratio < 0.7 ? "practice" : "adventure";
+}
+
+export function getLevelMastery(level: GardenLevel, mastery: Record<string, KeyMastery>): number {
+  if (!level.newKeys.length) return 0;
+  return Math.round(level.newKeys.reduce((sum, key) => sum + (mastery[key]?.score ?? 0), 0) / level.newKeys.length);
+}
+
+export function mergeKeyMastery(current: Record<string, KeyMastery>, session: SessionKeyStats): Record<string, KeyMastery> {
+  const next = { ...current };
+  Object.entries(session).forEach(([key, stat]) => {
+    const previous = current[key] ?? { attempts: 0, correct: 0, streak: 0, score: 0 };
+    const attempts = previous.attempts + stat.attempts;
+    const correct = previous.correct + stat.correct;
+    const streak = Math.max(previous.streak, stat.bestStreak);
+    const accuracy = correct / Math.max(1, attempts);
+    const practice = Math.min(1, attempts / 8);
+    next[key] = { attempts, correct, streak, score: Math.round(accuracy * practice * 100) };
+  });
+  return next;
+}
 
 export function getLevelWord(level: GardenLevel, completedWords: number): string {
   return level.words[completedWords % level.words.length];
@@ -205,9 +259,11 @@ export function getLiveScore(level: GardenLevel, correctKeys: number, mistakes: 
 }
 
 export function evaluateTypingKey(word: string, typedLength: number, key: string): "correct" | "complete" | "wrong" | "ignored" {
-  const normalized = key === " " ? " " : key.toLowerCase();
-  if (normalized.length !== 1 || !/^[a-z ]$/.test(normalized)) return "ignored";
-  if (normalized !== word[typedLength]) return "wrong";
+  if (key.length !== 1 || !/^[a-zA-Z ,\.']$/.test(key)) return "ignored";
+  const expected = word[typedLength];
+  const exactCaseRequired = expected >= "A" && expected <= "Z";
+  const matches = exactCaseRequired ? key === expected : key.toLowerCase() === expected;
+  if (!matches) return "wrong";
   return typedLength + 1 >= word.length ? "complete" : "correct";
 }
 
@@ -215,9 +271,8 @@ export function calculateGardenResult(level: GardenLevel, correctKeys: number, m
   const accuracy = Math.round((correctKeys / Math.max(1, correctKeys + mistakes)) * 100);
   const wpm = Math.round(correctKeys / 5 / (Math.max(1, elapsedSeconds) / 60));
   const score = getLiveScore(level, correctKeys, mistakes, completedWords, bestCombo);
-  const won = completedWords >= level.targetWords;
-  const completion = completedWords / level.targetWords;
-  const stars = won && accuracy >= 96 ? 3 : won || completion >= 0.65 ? 2 : 1;
+  const won = completedWords >= level.targetWords && accuracy >= 85;
+  const stars = won && accuracy >= 97 ? 3 : won && accuracy >= 90 ? 2 : won ? 1 : 0;
   const petals = stars * 12 + completedWords * 2 + (level.mission === "guardian" && won ? 12 : 0);
   const xp = completedWords * 8 + stars * 18 + Math.floor(bestCombo / 5) * 3;
   return { accuracy, wpm, score, stars, petals, xp, won };
@@ -236,7 +291,7 @@ export function unlockAchievements(progress: GardenProgress, levelIndex: number,
   return [...unlocked];
 }
 
-export function applyGardenResult(progress: GardenProgress, levelIndex: number, result: GardenResult, completedWords: number, bestCombo: number, dateKey: string): GardenProgress {
+export function applyGardenResult(progress: GardenProgress, levelIndex: number, result: GardenResult, completedWords: number, bestCombo: number, dateKey: string, keyStats: SessionKeyStats = {}): GardenProgress {
   const level = GARDEN_LEVELS[levelIndex];
   const unlocked = result.won ? Math.min(GARDEN_LEVELS.length, Math.max(progress.unlocked, levelIndex + 2)) : progress.unlocked;
   const dailyBase = progress.daily.date === dateKey ? progress.daily : { date: dateKey, words: 0, sessions: 0, claimed: false };
@@ -249,6 +304,7 @@ export function applyGardenResult(progress: GardenProgress, levelIndex: number, 
     xp: progress.xp + result.xp,
     bestScores: { ...progress.bestScores, [level.id]: Math.max(progress.bestScores[level.id], result.score) },
     daily: { ...dailyBase, words: dailyBase.words + completedWords, sessions: dailyBase.sessions + 1 },
+    keyMastery: mergeKeyMastery(progress.keyMastery, keyStats),
   };
   next.achievements = unlockAchievements(next, levelIndex, result, bestCombo);
   return next;

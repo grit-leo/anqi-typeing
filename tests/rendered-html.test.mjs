@@ -42,9 +42,10 @@ test("server-renders the full-screen Magic Garden commercial game", async () => 
 });
 
 test("includes real WebGL, large-game systems, touch input, safety and persistence", async () => {
-  const [page, hub, stage, engine, css, layout, packageJson] = await Promise.all([
+  const [page, hub, keyboard, stage, engine, css, layout, packageJson] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/AdventureHub.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/KeyboardCoach.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/MagicGarden3D.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/game-engine.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
@@ -80,6 +81,11 @@ test("includes real WebGL, large-game systems, touch input, safety and persisten
   assert.match(hub, /daily-view/);
   assert.match(hub, /collection-view/);
   assert.match(hub, /achievements-view/);
+  assert.match(hub, /getLevelMastery/);
+
+  assert.match(keyboard, /keyboard-coach/);
+  assert.match(keyboard, /fingerFor/);
+  assert.match(keyboard, /SHIFT/);
 
   assert.match(stage, /new THREE\.WebGLRenderer/);
   assert.match(stage, /new THREE\.PerspectiveCamera/);
@@ -96,6 +102,8 @@ test("includes real WebGL, large-game systems, touch input, safety and persisten
   assert.match(engine, /MissionType/);
   assert.match(engine, /claimDailyReward/);
   assert.match(engine, /unlockAchievements/);
+  assert.match(engine, /newKeys/);
+  assert.match(engine, /mergeKeyMastery/);
 
   assert.match(css, /height:100dvh/);
   assert.match(css, /\.spell-console/);

@@ -13,9 +13,12 @@ import {
   GARDEN_WORLDS,
   getDailyTarget,
   getLevelWord,
+  getLessonAct,
+  getLevelMastery,
   getLiveScore,
   getPlayerLevel,
   getPlayerLevelProgress,
+  mergeKeyMastery,
 } from "../app/game-engine.ts";
 
 test("large adventure ships four worlds, twelve progressive levels, and four mission types", () => {
@@ -23,21 +26,39 @@ test("large adventure ships four worlds, twelve progressive levels, and four mis
   assert.equal(GARDEN_LEVELS.length, 12);
   assert.deepEqual(GARDEN_WORLDS.map((world) => world.name), ["樱花谷", "月光湖", "云上王城", "极光圣殿"]);
   assert.deepEqual(new Set(GARDEN_LEVELS.map((level) => level.mission)), new Set(["bloom", "firefly", "rhythm", "guardian"]));
-  assert.ok(GARDEN_LEVELS.every((level) => level.targetWords >= 10 && level.duration >= 85));
+  assert.ok(GARDEN_LEVELS.every((level) => level.targetWords >= 8 && level.duration >= 85));
   assert.ok(GARDEN_LEVELS.every((level) => level.words.length >= level.targetWords));
+  assert.ok(GARDEN_LEVELS.every((level) => level.newKeys.length > 0 && level.learnedKeys.length >= level.newKeys.length));
   assert.equal(GARDEN_LEVELS.filter((level) => level.mission === "guardian").length, 4);
   assert.ok(GARDEN_LEVELS.at(-1).words.some((word) => word.includes(" ")));
 });
 
 test("word selection loops and typing input supports letters, phrases, and controls", () => {
   const first = GARDEN_LEVELS[0];
-  assert.equal(getLevelWord(first, 0), "star");
-  assert.equal(getLevelWord(first, first.words.length), "star");
+  assert.equal(getLevelWord(first, 0), "fff");
+  assert.equal(getLevelWord(first, first.words.length), "fff");
   assert.equal(evaluateTypingKey("star", 0, "S"), "correct");
   assert.equal(evaluateTypingKey("star", 3, "r"), "complete");
   assert.equal(evaluateTypingKey("magic book", 5, " "), "correct");
+  assert.equal(evaluateTypingKey("Magic", 0, "M"), "correct");
+  assert.equal(evaluateTypingKey("Magic", 0, "m"), "wrong");
+  assert.equal(evaluateTypingKey("Hello, garden.", 5, ","), "correct");
   assert.equal(evaluateTypingKey("star", 1, "x"), "wrong");
   assert.equal(evaluateTypingKey("star", 1, "Backspace"), "ignored");
+});
+
+test("lesson acts and key mastery turn practice into measurable learning", () => {
+  const first = GARDEN_LEVELS[0];
+  assert.equal(getLessonAct(first, 0), "learn");
+  assert.equal(getLessonAct(first, 3), "practice");
+  assert.equal(getLessonAct(first, 7), "adventure");
+  const mastery = mergeKeyMastery({}, {
+    f: { attempts: 8, correct: 8, bestStreak: 8 },
+    j: { attempts: 8, correct: 7, bestStreak: 5 },
+  });
+  assert.equal(mastery.f.score, 100);
+  assert.equal(mastery.j.score, 88);
+  assert.equal(getLevelMastery(first, mastery), 94);
 });
 
 test("missions score differently and results reward accuracy, completion, combo, and XP", () => {

@@ -11,13 +11,16 @@ import {
   evaluateTypingKey,
   GARDEN_LEVELS,
   getLevelWord,
+  getLessonAct,
   getLocalDateKey,
   getLiveScore,
   getPlayerLevel,
   type GardenProgress,
   type GardenResult,
+  type SessionKeyStats,
 } from "./game-engine";
 import { AdventureHub } from "./AdventureHub";
+import { KeyboardCoach } from "./KeyboardCoach";
 import { MagicGarden3D } from "./MagicGarden3D";
 
 type Phase = "lobby" | "playing" | "paused" | "complete";
@@ -40,6 +43,7 @@ function loadProgress(): GardenProgress {
         ownedCosmetics: parsed.ownedCosmetics ?? DEFAULT_GARDEN_PROGRESS.ownedCosmetics,
         equippedCosmetic: parsed.equippedCosmetic ?? DEFAULT_GARDEN_PROGRESS.equippedCosmetic,
         daily: { ...DEFAULT_GARDEN_PROGRESS.daily, ...parsed.daily },
+        keyMastery: parsed.keyMastery ?? DEFAULT_GARDEN_PROGRESS.keyMastery,
       };
     }
     const legacy = window.localStorage.getItem("anqi-typer-progress");
@@ -89,11 +93,12 @@ export default function Home() {
   const mobileInputRef = useRef<HTMLInputElement>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const sessionRef = useRef<SessionSnapshot>({ correctHits: 0, mistakes: 0, completedWords: 0, bestCombo: 0, elapsed: 0 });
+  const sessionKeyStatsRef = useRef<SessionKeyStats>({});
 
   const level = GARDEN_LEVELS[levelIndex];
   const word = getLevelWord(level, completedWords);
   const target = word[typed.length] ?? "";
-  const targetLabel = target === " " ? "空格" : target.toUpperCase();
+  const targetLabel = target === " " ? "空格" : target === "," ? "逗号" : target === "." ? "句号" : target === "'" ? "撇号" : target.toUpperCase();
   const timeLeft = Math.max(0, Math.ceil(level.duration - elapsed));
   const score = getLiveScore(level, correctHits, mistakes, completedWords, bestCombo);
   const accuracy = correctHits + mistakes === 0 ? 100 : Math.round((correctHits / (correctHits + mistakes)) * 100);
@@ -106,6 +111,8 @@ export default function Home() {
   const missionName = level.mission === "guardian" ? "守护者 Boss" : level.mission === "rhythm" ? "节奏短句" : level.mission === "firefly" ? "萤火竞速" : "花灵唤醒";
   const missionProgressCopy = level.mission === "guardian" ? "结界剩余" : level.mission === "rhythm" ? "旋律修复" : level.mission === "firefly" ? "萤火收集" : "花园净化";
   const missionProgressValue = level.mission === "guardian" ? Math.max(0, level.targetWords - completedWords) : completedWords;
+  const lessonAct = getLessonAct(level, completedWords);
+  const lessonActCopy = lessonAct === "learn" ? "认识新键" : lessonAct === "practice" ? "组合练习" : "剧情挑战";
 
   const levelLabel = useMemo(() => `${level.title}，${level.goal}`, [level]);
 
@@ -182,7 +189,7 @@ export default function Home() {
     setPhase("complete");
     playTone("win");
     setProgress((current) => {
-      const next = applyGardenResult(current, levelIndex, finalResult, final.completedWords, final.bestCombo, getLocalDateKey());
+      const next = applyGardenResult(current, levelIndex, finalResult, final.completedWords, final.bestCombo, getLocalDateKey(), sessionKeyStatsRef.current);
       try {
         window.localStorage.setItem(PROGRESS_KEY, JSON.stringify(next));
       } catch {
@@ -218,6 +225,7 @@ export default function Home() {
     setWrongStreak(0);
     finishingRef.current = false;
     sessionRef.current = { correctHits: 0, mistakes: 0, completedWords: 0, bestCombo: 0, elapsed: 0 };
+    sessionKeyStatsRef.current = {};
     startedAt.current = Date.now();
     setPhase("playing");
     window.setTimeout(() => mobileInputRef.current?.focus({ preventScroll: true }), 120);
@@ -302,15 +310,28 @@ export default function Home() {
     updateProgress((current) => buyOrEquipCosmetic(current, cosmeticId));
   }, [updateProgress]);
 
+  const recordKeyAttempt = useCallback((expected: string, correct: boolean) => {
+    const keys = /^[A-Z]$/.test(expected) ? ["shift", expected.toLowerCase()] : [expected === " " ? "space" : expected === "," ? "comma" : expected === "." ? "period" : expected === "'" ? "apostrophe" : expected.toLowerCase()];
+    keys.forEach((key) => {
+      const previous = sessionKeyStatsRef.current[key] ?? { attempts: 0, correct: 0, bestStreak: 0 };
+      const nextCorrect = previous.correct + (correct ? 1 : 0);
+      sessionKeyStatsRef.current[key] = {
+        attempts: previous.attempts + 1,
+        correct: nextCorrect,
+        bestStreak: correct ? Math.max(previous.bestStreak, combo + 1) : previous.bestStreak,
+      };
+    });
+  }, [combo]);
+
   const handleKey = useCallback((key: string) => {
     if (phase !== "playing" || finishingRef.current || !target) return;
-    const normalized = key.toLowerCase();
-    const outcome = evaluateTypingKey(word, typed.length, normalized);
+    const outcome = evaluateTypingKey(word, typed.length, key);
     if (outcome === "correct" || outcome === "complete") {
       const nextCorrect = correctHits + 1;
       const nextCombo = combo + 1;
       const nextBest = Math.max(bestCombo, nextCombo);
-      const nextTyped = typed + normalized;
+      const nextTyped = typed + target;
+      recordKeyAttempt(target, true);
       setCorrectHits(nextCorrect);
       setCombo(nextCombo);
       setBestCombo(nextBest);
@@ -340,6 +361,7 @@ export default function Home() {
         setTyped(nextTyped);
       }
     } else if (outcome === "wrong") {
+      recordKeyAttempt(target, false);
       setMistakes((current) => current + 1);
       setCombo(0);
       setWrongStreak((current) => {
@@ -351,7 +373,7 @@ export default function Home() {
       playTone("wrong");
       showFlash("wrong");
     }
-  }, [bestCombo, combo, completedWords, correctHits, finishGame, level.targetWords, mistakes, phase, playTone, reducedMotion, showFlash, showToast, target, targetLabel, typed, word]);
+  }, [bestCombo, combo, completedWords, correctHits, finishGame, level.targetWords, mistakes, phase, playTone, recordKeyAttempt, reducedMotion, showFlash, showToast, target, targetLabel, typed, word]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -486,7 +508,7 @@ export default function Home() {
           <div className="quest-hud">
             <div className="quest-copy"><span>{missionProgressCopy}</span><strong>{missionProgressValue}<i>/{level.targetWords}</i></strong></div>
             <div className="quest-track" aria-label={`${levelLabel}，完成 ${questProgress}%`}><i style={{ width: `${questProgress}%` }} /><span style={{ left: `calc(${questProgress}% - 9px)` }}>✿</span></div>
-            <small>{missionName} · {completedWords < Math.ceil(level.targetWords / 2) ? "第一阶段" : completedWords < level.targetWords ? "最终阶段" : "任务完成"}</small>
+            <small>{lessonActCopy} · 本课新键 {level.newKeys.map((key) => key === "space" ? "空格" : key === "shift" ? "Shift" : key === "comma" ? "," : key === "period" ? "." : key === "apostrophe" ? "'" : key.toUpperCase()).join(" · ")}</small>
           </div>
           <div className="session-hud">
             <span><small>{calmSession ? "学习模式" : "剩余时间"}</small><b className={!calmSession && timeLeft <= 10 ? "danger" : ""}>{calmSession ? "∞" : timeLeft}{!calmSession && <i>s</i>}</b></span>
@@ -512,7 +534,7 @@ export default function Home() {
               <span>点这里打开手机键盘</span>
               <input ref={mobileInputRef} value="" onChange={(event) => handleKey(event.target.value.slice(-1))} autoCapitalize="none" autoCorrect="off" spellCheck={false} inputMode="text" aria-label="手机打字输入框" />
             </label>
-            <p className={`desktop-hint ${wrongStreak >= 2 ? "needs-help" : ""}`}><i>F</i><i>J</i> 食指先找到凸点，再慢慢输入高亮按键 <b>{targetLabel}</b></p>
+            <KeyboardCoach target={target} learnedKeys={level.learnedKeys} newKeys={level.newKeys} wrongStreak={wrongStreak} />
           </div>
           {flash === "word" && <div className="word-burst" aria-live="polite">PERFECT SPELL <span>✦</span></div>}
           {toast && <div className="game-toast" aria-live="polite">{toast}</div>}
