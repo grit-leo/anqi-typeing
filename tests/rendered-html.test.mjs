@@ -20,22 +20,31 @@ test("server-renders the full-screen Magic Garden commercial game", async () => 
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
-  assert.match(html, /<title>安琪打字机｜星愿花园全屏打字冒险<\/title>/i);
+  assert.match(html, /<title>安琪打字机｜四界大型打字冒险<\/title>/i);
   assert.match(html, /安琪打字机/);
   assert.match(html, /星愿花园/);
   assert.match(html, /开始冒险/);
   assert.match(html, /花瓣启程/);
-  assert.match(html, /月光舞会/);
-  assert.match(html, /星愿王冠/);
-  assert.match(html, /本机保存进度/);
+  assert.match(html, /萤火邮差/);
+  assert.match(html, /蔷薇守门人/);
+  assert.match(html, /四大世界 · 十二关大型冒险/);
+  assert.match(html, /樱花谷/);
+  assert.match(html, /月光湖/);
+  assert.match(html, /云上王城/);
+  assert.match(html, /极光圣殿/);
+  assert.match(html, /世界地图/);
+  assert.match(html, /每日委托/);
+  assert.match(html, /魔法衣橱/);
+  assert.match(html, /成就图鉴/);
   assert.match(html, /role="tablist"/);
   assert.doesNotMatch(html, /3D 星球守卫战|30 秒星星雨|泡泡派对|课程地图/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton|Your site is taking shape/);
 });
 
-test("includes real WebGL, complete game states, touch input, safety and persistence", async () => {
-  const [page, stage, engine, css, layout, packageJson] = await Promise.all([
+test("includes real WebGL, large-game systems, touch input, safety and persistence", async () => {
+  const [page, hub, stage, engine, css, layout, packageJson] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/AdventureHub.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/MagicGarden3D.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/game-engine.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
@@ -57,6 +66,17 @@ test("includes real WebGL, complete game states, touch input, safety and persist
   assert.match(page, /phase === "complete"/);
   assert.match(page, /不用点输入框/);
   assert.match(page, /不扣生命/);
+  assert.match(page, /claimDailyReward/);
+  assert.match(page, /buyOrEquipCosmetic/);
+
+  assert.match(hub, /GARDEN_WORLDS/);
+  assert.match(hub, /GARDEN_LEVELS/);
+  assert.match(hub, /COSMETICS/);
+  assert.match(hub, /ACHIEVEMENTS/);
+  assert.match(hub, /world-map-view/);
+  assert.match(hub, /daily-view/);
+  assert.match(hub, /collection-view/);
+  assert.match(hub, /achievements-view/);
 
   assert.match(stage, /new THREE\.WebGLRenderer/);
   assert.match(stage, /new THREE\.PerspectiveCamera/);
@@ -69,13 +89,20 @@ test("includes real WebGL, complete game states, touch input, safety and persist
   assert.match(stage, /garden-stage-fallback/);
   assert.match(engine, /targetWords/);
   assert.match(engine, /bestScores/);
+  assert.match(engine, /GardenWorldId/);
+  assert.match(engine, /MissionType/);
+  assert.match(engine, /claimDailyReward/);
+  assert.match(engine, /unlockAchievements/);
 
   assert.match(css, /height:100dvh/);
   assert.match(css, /\.spell-console/);
   assert.match(css, /\.modal-backdrop/);
+  assert.match(css, /\.adventure-hub/);
+  assert.match(css, /\.stage-route/);
   assert.match(css, /@media \(max-width:800px\)/);
   assert.match(css, /@media \(prefers-reduced-motion:reduce\)/);
-  assert.match(layout, /og-v4\.png/);
+  assert.match(css, /og-v4\.png/);
+  assert.doesNotMatch(layout, /og:image|images:/);
   assert.match(layout, /lang="zh-CN"/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
 });

@@ -3,15 +3,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   applyGardenResult,
+  buyOrEquipCosmetic,
   calculateGardenResult,
+  claimDailyReward,
+  COSMETICS,
   DEFAULT_GARDEN_PROGRESS,
   evaluateTypingKey,
   GARDEN_LEVELS,
   getLevelWord,
+  getLocalDateKey,
   getLiveScore,
+  getPlayerLevel,
   type GardenProgress,
   type GardenResult,
 } from "./game-engine";
+import { AdventureHub } from "./AdventureHub";
 import { MagicGarden3D } from "./MagicGarden3D";
 
 type Phase = "lobby" | "playing" | "paused" | "complete";
@@ -30,6 +36,10 @@ function loadProgress(): GardenProgress {
         ...DEFAULT_GARDEN_PROGRESS,
         ...parsed,
         bestScores: { ...DEFAULT_GARDEN_PROGRESS.bestScores, ...parsed.bestScores },
+        achievements: parsed.achievements ?? DEFAULT_GARDEN_PROGRESS.achievements,
+        ownedCosmetics: parsed.ownedCosmetics ?? DEFAULT_GARDEN_PROGRESS.ownedCosmetics,
+        equippedCosmetic: parsed.equippedCosmetic ?? DEFAULT_GARDEN_PROGRESS.equippedCosmetic,
+        daily: { ...DEFAULT_GARDEN_PROGRESS.daily, ...parsed.daily },
       };
     }
     const legacy = window.localStorage.getItem("anqi-typer-progress");
@@ -79,11 +89,17 @@ export default function Home() {
   const level = GARDEN_LEVELS[levelIndex];
   const word = getLevelWord(level, completedWords);
   const target = word[typed.length] ?? "";
+  const targetLabel = target === " " ? "空格" : target.toUpperCase();
   const timeLeft = Math.max(0, Math.ceil(level.duration - elapsed));
-  const score = getLiveScore(correctHits, mistakes, completedWords, bestCombo);
+  const score = getLiveScore(level, correctHits, mistakes, completedWords, bestCombo);
   const accuracy = correctHits + mistakes === 0 ? 100 : Math.round((correctHits / (correctHits + mistakes)) * 100);
   const questProgress = Math.min(100, Math.round((completedWords / level.targetWords) * 100));
   const isFever = combo >= 12;
+  const playerLevel = getPlayerLevel(progress.xp);
+  const equippedCosmetic = COSMETICS.find((item) => item.id === progress.equippedCosmetic) ?? COSMETICS[0];
+  const missionName = level.mission === "guardian" ? "守护者 Boss" : level.mission === "rhythm" ? "节奏短句" : level.mission === "firefly" ? "萤火竞速" : "花灵唤醒";
+  const missionProgressCopy = level.mission === "guardian" ? "结界剩余" : level.mission === "rhythm" ? "旋律修复" : level.mission === "firefly" ? "萤火收集" : "花园净化";
+  const missionProgressValue = level.mission === "guardian" ? Math.max(0, level.targetWords - completedWords) : completedWords;
 
   const levelLabel = useMemo(() => `${level.title}，${level.goal}`, [level]);
 
@@ -160,7 +176,7 @@ export default function Home() {
     setPhase("complete");
     playTone("win");
     setProgress((current) => {
-      const next = applyGardenResult(current, levelIndex, finalResult, final.completedWords);
+      const next = applyGardenResult(current, levelIndex, finalResult, final.completedWords, final.bestCombo, getLocalDateKey());
       try {
         window.localStorage.setItem(PROGRESS_KEY, JSON.stringify(next));
       } catch {
@@ -244,6 +260,27 @@ export default function Home() {
     setSettingsOpen(false);
   }, []);
 
+  const updateProgress = useCallback((updater: (current: GardenProgress) => GardenProgress) => {
+    setProgress((current) => {
+      const next = updater(current);
+      try {
+        window.localStorage.setItem(PROGRESS_KEY, JSON.stringify(next));
+      } catch {
+        // In-memory progress still works when browser storage is unavailable.
+      }
+      return next;
+    });
+  }, []);
+
+  const claimDaily = useCallback(() => {
+    updateProgress((current) => claimDailyReward(current, getLocalDateKey()));
+    showToast("每日委托奖励已收入花园背包");
+  }, [showToast, updateProgress]);
+
+  const chooseCosmetic = useCallback((cosmeticId: string) => {
+    updateProgress((current) => buyOrEquipCosmetic(current, cosmeticId));
+  }, [updateProgress]);
+
   const handleKey = useCallback((key: string) => {
     if (phase !== "playing" || finishingRef.current || !target) return;
     const normalized = key.toLowerCase();
@@ -291,7 +328,8 @@ export default function Home() {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.metaKey || event.ctrlKey || event.altKey) return;
-      if (phase === "lobby" && event.key === "Enter" && !tutorialOpen && !helpOpen) {
+      const interactiveTarget = event.target instanceof HTMLElement && ["BUTTON", "INPUT", "A"].includes(event.target.tagName);
+      if (phase === "lobby" && event.key === "Enter" && !tutorialOpen && !helpOpen && !settingsOpen && !interactiveTarget) {
         event.preventDefault();
         requestStart();
       } else if (phase === "playing" && event.key === "Escape") {
@@ -307,7 +345,7 @@ export default function Home() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [handleKey, helpOpen, pauseGame, phase, requestStart, resumeGame, tutorialOpen]);
+  }, [handleKey, helpOpen, pauseGame, phase, requestStart, resumeGame, settingsOpen, tutorialOpen]);
 
   useEffect(() => {
     const onVisibility = () => {
@@ -340,10 +378,12 @@ export default function Home() {
   };
 
   return (
-    <main className={`magic-game phase-${phase} level-${level.id} ${flash ? `flash-${flash}` : ""} ${isFever ? "fever-mode" : ""}`}>
+    <main className={`magic-game phase-${phase} level-${level.id} mission-${level.mission} ${flash ? `flash-${flash}` : ""} ${isFever ? "fever-mode" : ""}`}>
       <MagicGarden3D
         phase={phase}
-        levelIndex={levelIndex}
+        worldIndex={level.worldIndex}
+        mission={level.mission}
+        cosmeticColor={equippedCosmetic.color}
         word={word}
         typedLength={typed.length}
         correctHits={correctHits}
@@ -364,7 +404,7 @@ export default function Home() {
           <div className="profile-strip" aria-label="成长记录">
             <span><i>✿</i><b>{progress.petals}</b><small>花瓣</small></span>
             <span><i>★</i><b>{progress.totalStars}</b><small>星星</small></span>
-            <span className="player-badge"><i>安</i><b>花语魔法师</b></span>
+            <span className="player-badge"><i>{playerLevel}</i><b>花语魔法师</b></span>
           </div>
         ) : (
           <div className="mission-title"><small>{level.chapter}</small><strong>{level.title}</strong></div>
@@ -389,43 +429,29 @@ export default function Home() {
         <section className="lobby-screen" aria-label="星愿花园主菜单">
           <div className="lobby-keyart" aria-hidden="true" />
           <div className="lobby-copy">
-            <span className="season-chip"><i /> 全屏魔法打字冒险</span>
+            <span className="season-chip"><i /> 四大世界 · 十二关大型冒险</span>
             <p className="lobby-eyebrow">ANQI TYPER · STORY SEASON 01</p>
             <h1>安琪打字机</h1>
-            <h2>星愿花园</h2>
-            <p className="lobby-lead">每一个单词，都会开出一朵花。握紧你的键盘魔杖，和月兔露米一起唤醒沉睡的星愿花园。</p>
+            <h2>星愿花园 · 四界大冒险</h2>
+            <p className="lobby-lead">穿越樱花谷、月光湖、云上王城与极光圣殿。每一个单词都会改变世界，和月兔露米一起完成十二场花语试炼。</p>
             <div className="lobby-actions">
               <button className="play-button" onClick={requestStart}><span>开始冒险</span><i>按 Enter</i><b>→</b></button>
               <button className="story-button" onClick={() => setHelpOpen(true)}>观看玩法 <span>▶</span></button>
             </div>
-            <div className="promise-row"><span>✦ 无广告</span><span>✦ 无付费陷阱</span><span>✦ 本机保存进度</span></div>
+            <div className="promise-row"><span>✦ 12 个剧情关卡</span><span>✦ 4 种任务机制</span><span>✦ 本机保存进度</span></div>
           </div>
 
-          <div className="chapter-picker" role="tablist" aria-label="选择故事章节">
-            <div className="chapter-heading"><span>故事章节</span><small>{progress.unlocked}/{GARDEN_LEVELS.length} 已解锁</small></div>
-            {GARDEN_LEVELS.map((item, index) => {
-              const locked = index >= progress.unlocked;
-              const active = index === levelIndex;
-              return (
-                <button key={item.id} role="tab" aria-selected={active} aria-label={`${item.title}${locked ? "，尚未解锁" : ""}`} disabled={locked} className={`chapter-card ${active ? "active" : ""} ${locked ? "locked" : ""}`} onClick={() => chooseLevel(index)} style={{ "--chapter-accent": item.accent } as React.CSSProperties}>
-                  <span className="chapter-number">{locked ? "◆" : `0${index + 1}`}</span>
-                  <span><small>{item.chapter}</small><strong>{item.title}</strong><em>{locked ? "完成前一章后解锁" : item.story}</em></span>
-                  <b>{progress.bestScores[item.id] ? `${progress.bestScores[item.id]} 分` : locked ? "🔒" : active ? "已选择" : "选择"}</b>
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="lobby-level-note"><span>本章任务</span><strong>{level.goal}</strong><small>{level.duration} 秒 · 建议 6–12 岁</small></div>
+          <AdventureHub progress={progress} levelIndex={levelIndex} onChooseLevel={chooseLevel} onStart={requestStart} onClaimDaily={claimDaily} onCosmetic={chooseCosmetic} />
         </section>
       )}
+      {phase === "lobby" && toast && <div className="hub-toast" aria-live="polite">{toast}</div>}
 
       {(phase === "playing" || phase === "paused") && (
         <section className="play-interface" aria-label="花园打字游戏">
           <div className="quest-hud">
-            <div className="quest-copy"><span>花园净化进度</span><strong>{completedWords}<i>/{level.targetWords}</i></strong></div>
+            <div className="quest-copy"><span>{missionProgressCopy}</span><strong>{missionProgressValue}<i>/{level.targetWords}</i></strong></div>
             <div className="quest-track" aria-label={`${levelLabel}，完成 ${questProgress}%`}><i style={{ width: `${questProgress}%` }} /><span style={{ left: `calc(${questProgress}% - 9px)` }}>✿</span></div>
-            <small>{completedWords < 5 ? "唤醒花灵" : completedWords < level.targetWords ? "净化暗影花苞" : "花园已复苏"}</small>
+            <small>{missionName} · {completedWords < Math.ceil(level.targetWords / 2) ? "第一阶段" : completedWords < level.targetWords ? "最终阶段" : "任务完成"}</small>
           </div>
           <div className="session-hud">
             <span><small>剩余时间</small><b className={timeLeft <= 10 ? "danger" : ""}>{timeLeft}<i>s</i></b></span>
@@ -438,12 +464,12 @@ export default function Home() {
           </div>
 
           <div className="spell-console">
-            <span className="spell-label"><i /> 花语咒语</span>
+            <span className="spell-label"><i /> {missionName}</span>
             <div className="spell-word" aria-live="polite" aria-label={`目标单词 ${word}`}>
-              {word.split("").map((letter, index) => <span key={`${completedWords}-${index}`} className={index < typed.length ? "done" : index === typed.length ? "current" : ""}>{letter}</span>)}
+                  {word.split("").map((letter, index) => <span key={`${completedWords}-${index}`} className={index < typed.length ? "done" : index === typed.length ? "current" : ""}>{letter === " " ? "·" : letter}</span>)}
             </div>
             <div className="spell-meta">
-              <span>下一键 <kbd>{target.toUpperCase()}</kbd></span>
+              <span>下一键 <kbd>{targetLabel}</kbd></span>
               <div><i style={{ width: `${Math.round((typed.length / word.length) * 100)}%` }} /></div>
               <span>准确率 <b>{accuracy}%</b></span>
             </div>
@@ -451,7 +477,7 @@ export default function Home() {
               <span>点这里打开手机键盘</span>
               <input ref={mobileInputRef} value="" onChange={(event) => handleKey(event.target.value.slice(-1))} autoCapitalize="none" autoCorrect="off" spellCheck={false} inputMode="text" aria-label="手机打字输入框" />
             </label>
-            <p className="desktop-hint"><i>F</i><i>J</i> 手指放在凸点上，直接输入高亮字母 <b>{target.toUpperCase()}</b></p>
+            <p className="desktop-hint"><i>F</i><i>J</i> 手指放在凸点上，直接输入高亮按键 <b>{targetLabel}</b></p>
           </div>
           {flash === "word" && <div className="word-burst" aria-live="polite">PERFECT SPELL <span>✦</span></div>}
           {toast && <div className="game-toast" aria-live="polite">{toast}</div>}
@@ -478,7 +504,7 @@ export default function Home() {
             <h2>{result.won ? "花园重新绽放啦！" : "你的魔法正在变强"}</h2>
             <p>{result.won ? `你和露米完成了「${level.title}」的守护任务。` : `再唤醒 ${Math.max(0, level.targetWords - completedWords)} 朵花，就能点亮这一章。`}</p>
             <div className="result-stars" aria-label={`获得 ${result.stars} 颗星`}>{[0, 1, 2].map((star) => <span key={star} className={star < result.stars ? "earned" : ""}>★</span>)}</div>
-            <div className="result-score"><small>本局星愿积分</small><strong>{result.score}</strong><span>历史最佳 {progress.bestScores[level.id]}</span></div>
+            <div className="result-score"><small>本局星愿积分</small><strong>{result.score}</strong><span>历史最佳 {progress.bestScores[level.id]} · +{result.xp} XP</span></div>
             <div className="result-grid">
               <span><i>◎</i><small>准确率</small><strong>{result.accuracy}%</strong></span>
               <span><i>⌁</i><small>打字速度</small><strong>{result.wpm}<em> WPM</em></strong></span>

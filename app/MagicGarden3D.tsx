@@ -2,12 +2,15 @@
 
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
+import type { MissionType } from "./game-engine";
 
 type GamePhase = "lobby" | "playing" | "paused" | "complete";
 
 type MagicGarden3DProps = {
   phase: GamePhase;
-  levelIndex: number;
+  worldIndex: number;
+  mission: MissionType;
+  cosmeticColor: string;
   word: string;
   typedLength: number;
   correctHits: number;
@@ -22,7 +25,8 @@ type LiveState = MagicGarden3DProps;
 const PALETTES = [
   { sky: 0x241b58, fog: 0x4f3d85, bloom: 0xff9fc6, glow: 0xffd26f, magic: 0x73f2d0 },
   { sky: 0x171746, fog: 0x493f8f, bloom: 0xb59cff, glow: 0xf4ecff, magic: 0x7edfff },
-  { sky: 0x102d45, fog: 0x2d6570, bloom: 0x73e0cf, glow: 0xffe299, magic: 0xff92c5 },
+  { sky: 0x164262, fog: 0x4b8da2, bloom: 0x8cdcf3, glow: 0xffe299, magic: 0xff92c5 },
+  { sky: 0x082f42, fog: 0x245c68, bloom: 0x62e0c9, glow: 0xffd77b, magic: 0xff8fc5 },
 ] as const;
 
 function seeded(seedStart: number) {
@@ -57,7 +61,7 @@ function paintWord(canvas: HTMLCanvasElement, word: string, typedLength: number)
   context.strokeStyle = "rgba(255, 221, 242, .72)";
   context.stroke();
 
-  const display = word.toUpperCase();
+  const display = word.toUpperCase().replaceAll(" ", "·");
   context.font = "900 76px ui-rounded, system-ui, sans-serif";
   context.textBaseline = "middle";
   const widths = [...display].map((letter) => context.measureText(letter).width + 4);
@@ -137,7 +141,7 @@ export function MagicGarden3D(props: MagicGarden3DProps) {
     renderer.domElement.setAttribute("aria-hidden", "true");
     mount.appendChild(renderer.domElement);
 
-    const initialPalette = PALETTES[liveRef.current.levelIndex] ?? PALETTES[0];
+    const initialPalette = PALETTES[liveRef.current.worldIndex] ?? PALETTES[0];
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(initialPalette.sky);
     scene.fog = new THREE.FogExp2(initialPalette.fog, 0.026);
@@ -271,6 +275,7 @@ export function MagicGarden3D(props: MagicGarden3DProps) {
     garden.add(flowerGroup);
 
     const crystalMaterial = new THREE.MeshStandardMaterial({ color: 0xbfa9ff, roughness: 0.18, metalness: 0.12, emissive: 0x5740a8, emissiveIntensity: 0.65, transparent: true, opacity: 0.92 });
+    const crystalWorld = new THREE.Group();
     [[-2.9, -1.2], [5.8, -1.7], [6.3, 2.5], [-6.8, 2.2]].forEach(([x, z], groupIndex) => {
       const cluster = new THREE.Group();
       cluster.position.set(x, 0.25, z);
@@ -280,8 +285,48 @@ export function MagicGarden3D(props: MagicGarden3DProps) {
         crystal.scale.y = 1.7 + groupIndex * 0.08;
         cluster.add(crystal);
       }
-      garden.add(cluster);
+      crystalWorld.add(cluster);
     });
+    garden.add(crystalWorld);
+
+    const cloudWorld = new THREE.Group();
+    const cloudMaterial = new THREE.MeshStandardMaterial({ color: 0xe8f8ff, roughness: 0.82, transparent: true, opacity: 0.88 });
+    for (let index = 0; index < 9; index += 1) {
+      const cloud = new THREE.Mesh(new THREE.IcosahedronGeometry(0.65 + random() * 0.55, 2), cloudMaterial);
+      cloud.position.set((random() - 0.5) * 14, 2.3 + random() * 3.5, -4 - random() * 5);
+      cloud.scale.set(1.5 + random(), 0.45 + random() * 0.35, 0.85);
+      cloudWorld.add(cloud);
+    }
+    const skyTowerMaterial = new THREE.MeshStandardMaterial({ color: 0xffe29a, roughness: 0.52, emissive: 0x8a622d, emissiveIntensity: 0.22 });
+    [-4.7, 4.8].forEach((x, index) => {
+      const tower = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.62, 3.2 + index * 0.6, 10), skyTowerMaterial);
+      tower.position.set(x, 1.75, -4.3 - index);
+      tower.castShadow = true;
+      cloudWorld.add(tower);
+      const roof = new THREE.Mesh(new THREE.ConeGeometry(0.72, 1.15, 10), new THREE.MeshStandardMaterial({ color: 0x7bbde8, roughness: 0.62 }));
+      roof.position.set(x, 3.9 + index * 0.3, -4.3 - index);
+      cloudWorld.add(roof);
+    });
+    scene.add(cloudWorld);
+
+    const auroraWorld = new THREE.Group();
+    const auroraColors = [0x5ff0ce, 0xff89c3, 0x9c8cff];
+    auroraColors.forEach((color, index) => {
+      const curve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(-8, 5.8 + index * 0.7, -7 - index),
+        new THREE.Vector3(-3, 7.1 + index * 0.35, -9),
+        new THREE.Vector3(2, 5.7 + index * 0.65, -8),
+        new THREE.Vector3(8, 7.4 - index * 0.2, -10),
+      ]);
+      const ribbon = new THREE.Mesh(new THREE.TubeGeometry(curve, 42, 0.035 + index * 0.012, 6, false), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending }));
+      auroraWorld.add(ribbon);
+    });
+    [-5.4, 5.2].forEach((x) => {
+      const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.34, 4.8, 10), new THREE.MeshStandardMaterial({ color: 0x76d9c7, roughness: 0.3, metalness: 0.18, emissive: 0x1b6c68, emissiveIntensity: 0.5 }));
+      pillar.position.set(x, 1.8, -3.8);
+      auroraWorld.add(pillar);
+    });
+    scene.add(auroraWorld);
 
     const heroine = new THREE.Group();
     heroine.position.set(-2.25, -0.95, 3.2);
@@ -290,6 +335,7 @@ export function MagicGarden3D(props: MagicGarden3DProps) {
     const skinMaterial = new THREE.MeshStandardMaterial({ color: 0xffd4bd, roughness: 0.78 });
     const hairMaterial = new THREE.MeshStandardMaterial({ color: 0x49316e, roughness: 0.68 });
     const dressMaterial = new THREE.MeshStandardMaterial({ color: 0x9e7af0, roughness: 0.48, metalness: 0.08, emissive: 0x2e1e6e, emissiveIntensity: 0.28 });
+    const cosmeticTarget = new THREE.Color(liveRef.current.cosmeticColor);
     const head = new THREE.Mesh(new THREE.SphereGeometry(0.43, 24, 18), skinMaterial);
     head.position.y = 2.18;
     head.castShadow = true;
@@ -356,6 +402,8 @@ export function MagicGarden3D(props: MagicGarden3DProps) {
     wisp.position.set(1.15, 1.7, 1.2);
     scene.add(wisp);
     const wispMaterial = new THREE.MeshStandardMaterial({ color: initialPalette.bloom, emissive: initialPalette.bloom, emissiveIntensity: 1.15, roughness: 0.25, transparent: true, opacity: 0.94 });
+    const guardianColor = new THREE.Color(0x8a3f88);
+    const guardianEmissive = new THREE.Color(0xff477e);
     const wispCore = new THREE.Mesh(new THREE.IcosahedronGeometry(0.52, 2), wispMaterial);
     wisp.add(wispCore);
     const halo = new THREE.Mesh(new THREE.TorusGeometry(0.8, 0.025, 8, 72), new THREE.MeshBasicMaterial({ color: initialPalette.magic, transparent: true, opacity: 0.72 }));
@@ -484,17 +532,25 @@ export function MagicGarden3D(props: MagicGarden3DProps) {
       const time = clock.elapsedTime;
       const live = liveRef.current;
       const motionOff = live.reducedMotion || systemReducedMotion;
-      const palette = paletteColors[live.levelIndex] ?? paletteColors[0];
+      const palette = paletteColors[live.worldIndex] ?? paletteColors[0];
 
       (scene.background as THREE.Color).lerp(palette.sky, 0.025);
       (scene.fog as THREE.FogExp2).color.lerp(palette.fog, 0.025);
       blossomMaterial.color.lerp(palette.bloom, 0.03);
       blossomMaterial.emissive.lerp(palette.bloom, 0.03);
-      wispMaterial.color.lerp(palette.bloom, 0.04);
-      wispMaterial.emissive.lerp(palette.bloom, 0.04);
+      wispMaterial.color.lerp(live.mission === "guardian" ? guardianColor : palette.bloom, 0.04);
+      wispMaterial.emissive.lerp(live.mission === "guardian" ? guardianEmissive : palette.bloom, 0.04);
       magicLight.color.lerp(palette.magic, 0.04);
       beamMaterial.color.lerp(palette.magic, 0.05);
       burstMaterial.color.lerp(palette.glow, 0.05);
+      cosmeticTarget.set(live.cosmeticColor);
+      dressMaterial.color.lerp(cosmeticTarget, 0.05);
+      tree.visible = live.worldIndex === 0;
+      pond.visible = live.worldIndex <= 1;
+      pondRing.visible = live.worldIndex <= 1;
+      crystalWorld.visible = live.worldIndex === 1 || live.worldIndex === 3;
+      cloudWorld.visible = live.worldIndex === 2;
+      auroraWorld.visible = live.worldIndex === 3;
 
       if (live.word !== lastWord) {
         paintWord(labelCanvas, live.word, live.typedLength);
@@ -538,8 +594,10 @@ export function MagicGarden3D(props: MagicGarden3DProps) {
       wispCore.rotation.y += delta * 0.55;
       halo.rotation.z -= delta * (0.5 + live.combo * 0.012);
       pulse = Math.max(0, pulse - delta * 4.5);
-      wispCore.scale.setScalar(1 + pulse * 0.22);
-      magicLight.intensity = 18 + Math.min(20, live.combo * 0.7) + pulse * 20;
+      const missionScale = live.mission === "guardian" ? 1.42 : live.mission === "firefly" ? 0.88 : 1;
+      wispCore.scale.setScalar(missionScale + pulse * 0.22);
+      halo.scale.setScalar(live.mission === "guardian" ? 1.2 : 1);
+      magicLight.intensity = 18 + Math.min(20, live.combo * 0.7) + pulse * 20 + (live.mission === "guardian" ? 8 : 0);
       missLight.intensity = THREE.MathUtils.lerp(missLight.intensity, 0, 0.12);
       beamMaterial.opacity = time < beamUntil ? Math.max(0, (beamUntil - time) * 8.2) : 0;
 
@@ -569,6 +627,8 @@ export function MagicGarden3D(props: MagicGarden3DProps) {
         fireflies.rotation.y += delta * 0.012;
         fireflies.position.y = Math.sin(time * 0.35) * 0.18;
         pond.material.opacity = 0.62 + Math.sin(time * 0.9) * 0.05;
+        cloudWorld.rotation.y = Math.sin(time * 0.12) * 0.035;
+        auroraWorld.position.y = Math.sin(time * 0.32) * 0.13;
       }
 
       pointerCurrent.lerp(pointerTarget, motionOff ? 0 : 0.035);
