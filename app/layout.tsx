@@ -6,14 +6,14 @@ import "./globals.css";
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
-const title = "安琪打字机｜儿童趣味打字课";
-const description = "驾驶 3D 飞船击退单词陨石，在真实 WebGL 星球守卫战、星路冒险与趣味挑战中快乐掌握英文键盘打字。";
+const title = "安琪打字机｜星愿花园全屏打字冒险";
+const description = "进入全屏 3D 星愿花园，用键盘施展花语魔法，在剧情关卡、魔力连击与星级成长中快乐掌握英文打字。";
 
 export async function generateMetadata(): Promise<Metadata> {
   const requestHeaders = await headers();
   const host = requestHeaders.get("host") ?? "key-quest-cn.gitluochao.chatgpt.site";
   const protocol = requestHeaders.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
-  const imageUrl = `${protocol}://${host}/og-v3.png`;
+  const imageUrl = `${protocol}://${host}/og-v4.png`;
 
   return {
     title,

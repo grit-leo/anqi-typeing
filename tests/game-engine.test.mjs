@@ -1,49 +1,63 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { calculateGameResult, getModeDuration, getModePrompts, getSessionReward } from "../app/game-engine.ts";
+import {
+  applyGardenResult,
+  calculateGardenResult,
+  DEFAULT_GARDEN_PROGRESS,
+  evaluateTypingKey,
+  GARDEN_LEVELS,
+  getLevelWord,
+  getLiveScore,
+} from "../app/game-engine.ts";
 
-const lesson = { keys: ["a", "s", "d", "f"], prompts: ["asdf", "sad dad"], xp: 50 };
-
-test("each game mode has a distinct, playable prompt flow", () => {
-  assert.deepEqual(getModePrompts("orbit-defense", lesson), lesson.prompts);
-  assert.deepEqual(getModePrompts("journey", lesson), lesson.prompts);
-  assert.deepEqual(getModePrompts("star-rush", lesson), lesson.prompts);
-  const bubbles = getModePrompts("bubble-party", lesson);
-  assert.equal(bubbles.length, 3);
-  assert.ok(bubbles.every((prompt) => prompt.length === lesson.keys.length * 2));
-  assert.ok(bubbles.every((prompt) => [...prompt].every((key) => lesson.keys.includes(key))));
+test("commercial story chapters have complete goals and progressive vocabulary", () => {
+  assert.equal(GARDEN_LEVELS.length, 3);
+  assert.deepEqual(GARDEN_LEVELS.map((level) => level.title), ["花瓣启程", "月光舞会", "星愿王冠"]);
+  assert.ok(GARDEN_LEVELS.every((level) => level.targetWords > 0 && level.duration >= 90));
+  assert.ok(GARDEN_LEVELS.every((level) => level.words.length >= level.targetWords));
+  assert.ok(GARDEN_LEVELS[2].words.some((word) => word.length >= 8));
 });
 
-test("arcade modes award replay XP without replacing course rewards", () => {
-  assert.equal(getSessionReward("journey", 50), 50);
-  assert.equal(getSessionReward("orbit-defense", 50), 50);
-  assert.equal(getSessionReward("star-rush", 50), 35);
-  assert.equal(getSessionReward("bubble-party", 50), 30);
+test("word selection is deterministic and loops without ending a timed session", () => {
+  const level = GARDEN_LEVELS[0];
+  assert.equal(getLevelWord(level, 0), "star");
+  assert.equal(getLevelWord(level, level.words.length), "star");
+  assert.equal(getLevelWord(level, 5), "magic");
 });
 
-test("timed modes expose their intended round durations", () => {
-  assert.equal(getModeDuration("orbit-defense"), 45);
-  assert.equal(getModeDuration("star-rush"), 30);
-  assert.equal(getModeDuration("journey"), null);
-  assert.equal(getModeDuration("bubble-party"), null);
+test("typing input accepts the next letter, completes words, and ignores controls", () => {
+  assert.equal(evaluateTypingKey("star", 0, "S"), "correct");
+  assert.equal(evaluateTypingKey("star", 3, "r"), "complete");
+  assert.equal(evaluateTypingKey("star", 1, "x"), "wrong");
+  assert.equal(evaluateTypingKey("star", 1, "Backspace"), "ignored");
+  assert.equal(evaluateTypingKey("star", 1, "1"), "ignored");
 });
 
-test("results reward accuracy, speed, and streak without producing negative scores", () => {
-  const perfect = calculateGameResult("journey", 40, 0, 30, 40);
+test("results reward accuracy, completion and combo without negative scoring", () => {
+  const level = GARDEN_LEVELS[0];
+  const perfect = calculateGardenResult(level, 50, 0, 60, 10, 25);
+  assert.equal(perfect.won, true);
   assert.equal(perfect.accuracy, 100);
-  assert.equal(perfect.wpm, 16);
+  assert.equal(perfect.wpm, 10);
   assert.equal(perfect.stars, 3);
-  assert.ok(perfect.score > 0);
+  assert.ok(perfect.petals >= 50);
 
-  const rush = calculateGameResult("star-rush", 60, 3, 30, 25);
-  assert.equal(rush.stars, 3);
-  assert.ok(rush.score >= 650);
+  const growing = calculateGardenResult(level, 18, 8, 90, 7, 4);
+  assert.equal(growing.won, false);
+  assert.equal(growing.stars, 2);
+  assert.ok(growing.score >= 0);
+  assert.equal(getLiveScore(1, 99, 0, 0), 0);
+});
 
-  const defense = calculateGameResult("orbit-defense", 80, 2, 45, 30);
-  assert.equal(defense.stars, 3);
-  assert.ok(defense.score >= 850);
+test("winning unlocks the next chapter and preserves best scores", () => {
+  const win = calculateGardenResult(GARDEN_LEVELS[0], 50, 1, 70, 10, 18);
+  const progressed = applyGardenResult(DEFAULT_GARDEN_PROGRESS, 0, win, 10);
+  assert.equal(progressed.unlocked, 2);
+  assert.equal(progressed.totalWords, 10);
+  assert.equal(progressed.totalStars, win.stars);
+  assert.equal(progressed.bestScores["petal-gate"], win.score);
 
-  const struggling = calculateGameResult("bubble-party", 1, 20, 20, 1);
-  assert.equal(struggling.stars, 1);
-  assert.ok(struggling.score >= 0);
+  const lowerReplay = { ...win, score: win.score - 100 };
+  const replayed = applyGardenResult(progressed, 0, lowerReplay, 10);
+  assert.equal(replayed.bestScores["petal-gate"], win.score);
 });

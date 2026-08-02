@@ -14,61 +14,68 @@ async function render() {
   );
 }
 
-test("server-renders the complete typing product", async () => {
+test("server-renders the full-screen Magic Garden commercial game", async () => {
   const response = await render();
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
-  assert.match(html, /<title>安琪打字机｜儿童趣味打字课<\/title>/i);
+  assert.match(html, /<title>安琪打字机｜星愿花园全屏打字冒险<\/title>/i);
   assert.match(html, /安琪打字机/);
-  assert.match(html, /起航信号/);
-  assert.match(html, /开始守卫/);
-  assert.match(html, /今天去哪里/);
-  assert.match(html, /3D 星球守卫战/);
-  assert.match(html, /WEBGL 3D/);
-  assert.match(html, /键盘就是你的能量炮/);
-  assert.match(html, /星路冒险/);
-  assert.match(html, /30 秒星星雨/);
-  assert.match(html, /泡泡派对/);
-  assert.match(html, /aria-label="课程地图"/);
+  assert.match(html, /星愿花园/);
+  assert.match(html, /开始冒险/);
+  assert.match(html, /花瓣启程/);
+  assert.match(html, /月光舞会/);
+  assert.match(html, /星愿王冠/);
+  assert.match(html, /本机保存进度/);
+  assert.match(html, /role="tablist"/);
+  assert.doesNotMatch(html, /3D 星球守卫战|30 秒星星雨|泡泡派对|课程地图/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton|Your site is taking shape/);
 });
 
-test("includes the essential 3D, learning, feedback, and persistence logic", async () => {
-  const [page, arena, css, layout, packageJson] = await Promise.all([
+test("includes real WebGL, complete game states, touch input, safety and persistence", async () => {
+  const [page, stage, engine, css, layout, packageJson] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/TypingArena3D.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/MagicGarden3D.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/game-engine.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
   ]);
 
   assert.match(page, /window\.addEventListener\("keydown"/);
-  assert.match(page, /handleKey\(" "\)/);
-  assert.match(page, /sessionAccuracy/);
-  assert.match(page, /calculateGameResult/);
-  assert.match(page, /anqi-typer-progress/);
-  assert.match(page, /key-quest-progress/);
-  assert.match(page, /prefers-reduced-motion|sr-only/);
+  assert.match(page, /visibilitychange/);
+  assert.match(page, /requestFullscreen/);
+  assert.match(page, /mobileInputRef/);
+  assert.match(page, /inputMode="text"/);
+  assert.match(page, /anqi-magic-garden-progress/);
+  assert.match(page, /applyGardenResult/);
+  assert.match(page, /calculateGardenResult/);
+  assert.match(page, /AudioContext/);
   assert.match(page, /aria-live="assertive"/);
-  assert.match(page, /LESSONS\.map/);
-  assert.match(page, /GAME_MODES\.map/);
-  assert.match(page, /role="tablist"/);
-  assert.match(page, /暂停并退出本局/);
-  assert.match(page, /TypingArena3D/);
-  assert.match(arena, /new THREE\.WebGLRenderer/);
-  assert.match(arena, /new THREE\.PerspectiveCamera/);
-  assert.match(arena, /new THREE\.CanvasTexture/);
-  assert.match(arena, /new THREE\.Line/);
-  assert.match(arena, /new THREE\.Points/);
-  assert.match(arena, /pointermove/);
-  assert.match(arena, /webglcontextlost/);
-  assert.match(arena, /轻量守卫模式/);
-  assert.match(arena, /prefers-reduced-motion/);
-  assert.match(css, /\.three-arena/);
-  assert.match(css, /@media \(max-width:580px\)/);
-  assert.match(css, /@media \(prefers-reduced-motion:\s*reduce\)/);
+  assert.match(page, /phase === "paused"/);
+  assert.match(page, /phase === "complete"/);
+  assert.match(page, /不用点输入框/);
+  assert.match(page, /不扣生命/);
+
+  assert.match(stage, /new THREE\.WebGLRenderer/);
+  assert.match(stage, /new THREE\.PerspectiveCamera/);
+  assert.match(stage, /new THREE\.CanvasTexture/);
+  assert.match(stage, /new THREE\.Line/);
+  assert.match(stage, /new THREE\.Points/);
+  assert.match(stage, /webglcontextlost/);
+  assert.match(stage, /pointermove/);
+  assert.match(stage, /prefers-reduced-motion/);
+  assert.match(stage, /garden-stage-fallback/);
+  assert.match(engine, /targetWords/);
+  assert.match(engine, /bestScores/);
+
+  assert.match(css, /height:100dvh/);
+  assert.match(css, /\.spell-console/);
+  assert.match(css, /\.modal-backdrop/);
+  assert.match(css, /@media \(max-width:800px\)/);
+  assert.match(css, /@media \(prefers-reduced-motion:reduce\)/);
+  assert.match(layout, /og-v4\.png/);
   assert.match(layout, /lang="zh-CN"/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
 });
