@@ -15,10 +15,13 @@ import {
   getLevelWord,
   getLessonAct,
   getLevelMastery,
+  getGuardianState,
+  getMissionDuration,
   getLiveScore,
   getPlayerLevel,
   getPlayerLevelProgress,
   mergeKeyMastery,
+  MISSION_RULES,
 } from "../app/game-engine.ts";
 
 test("large adventure ships four worlds, twelve progressive levels, and four mission types", () => {
@@ -67,16 +70,32 @@ test("missions score differently and results reward accuracy, completion, combo,
   assert.ok(bloom && guardian);
   assert.ok(getLiveScore(guardian, 40, 1, 10, 20) > getLiveScore(bloom, 40, 1, 10, 20));
 
-  const perfect = calculateGardenResult(bloom, 50, 0, 60, bloom.targetWords, 25);
+  const perfect = calculateGardenResult(bloom, 50, 0, 60, bloom.targetWords, 25, 120);
   assert.equal(perfect.won, true);
   assert.equal(perfect.accuracy, 100);
   assert.equal(perfect.stars, 3);
   assert.ok(perfect.petals >= 50);
   assert.ok(perfect.xp > 0);
+  assert.equal(perfect.missionBonus, 120);
 
   const growing = calculateGardenResult(bloom, 18, 8, 90, 7, 4);
   assert.equal(growing.won, false);
   assert.ok(growing.score >= 0);
+});
+
+test("every mission has a distinct rule and guardian phase", () => {
+  assert.equal(MISSION_RULES.bloom.untimed, true);
+  assert.equal(MISSION_RULES.firefly.durationOverride, 66);
+  assert.equal(MISSION_RULES.rhythm.untimed, false);
+  assert.match(`${MISSION_RULES.guardian.verb}${MISSION_RULES.guardian.hint}`, /三重护盾/);
+  const bloom = GARDEN_LEVELS.find((level) => level.mission === "bloom");
+  const firefly = GARDEN_LEVELS.find((level) => level.mission === "firefly");
+  const guardian = GARDEN_LEVELS.find((level) => level.mission === "guardian");
+  assert.ok(bloom && firefly && guardian);
+  assert.equal(getMissionDuration(bloom), null);
+  assert.equal(getMissionDuration(firefly), 66);
+  assert.deepEqual(getGuardianState(guardian, 0), { hpPercent: 100, phase: 1 });
+  assert.equal(getGuardianState(guardian, guardian.targetWords).hpPercent, 0);
 });
 
 test("winning unlocks the twelve-level path, achievements, daily progress, and best scores", () => {

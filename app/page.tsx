@@ -14,7 +14,10 @@ import {
   getLessonAct,
   getLocalDateKey,
   getLiveScore,
+  getGuardianState,
+  getMissionDuration,
   getPlayerLevel,
+  MISSION_RULES,
   type GardenProgress,
   type GardenResult,
   type SessionKeyStats,
@@ -83,6 +86,8 @@ export default function Home() {
   const [flash, setFlash] = useState<Flash>(null);
   const [toast, setToast] = useState("");
   const [wrongStreak, setWrongStreak] = useState(0);
+  const [missionBonus, setMissionBonus] = useState(0);
+  const [rhythmHits, setRhythmHits] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const startedAt = useRef(0);
   const finishingRef = useRef(false);
@@ -90,6 +95,8 @@ export default function Home() {
   const finishTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const settingsResumeRef = useRef(false);
+  const missionBonusRef = useRef(0);
+  const lastMissionRoundRef = useRef(1);
   const mobileInputRef = useRef<HTMLInputElement>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const sessionRef = useRef<SessionSnapshot>({ correctHits: 0, mistakes: 0, completedWords: 0, bestCombo: 0, elapsed: 0 });
@@ -99,11 +106,12 @@ export default function Home() {
   const word = getLevelWord(level, completedWords);
   const target = word[typed.length] ?? "";
   const targetLabel = target === " " ? "空格" : target === "," ? "逗号" : target === "." ? "句号" : target === "'" ? "撇号" : target.toUpperCase();
-  const timeLeft = Math.max(0, Math.ceil(level.duration - elapsed));
-  const score = getLiveScore(level, correctHits, mistakes, completedWords, bestCombo);
+  const missionDuration = getMissionDuration(level);
+  const timeLeft = missionDuration === null ? null : Math.max(0, Math.ceil(missionDuration - elapsed));
+  const score = getLiveScore(level, correctHits, mistakes, completedWords, bestCombo, missionBonus);
   const accuracy = correctHits + mistakes === 0 ? 100 : Math.round((correctHits / (correctHits + mistakes)) * 100);
   const accuracyLabel = correctHits + mistakes < 5 ? "正在热身" : `${accuracy}%`;
-  const calmSession = beginnerMode && levelIndex === 0;
+  const calmSession = (beginnerMode && levelIndex === 0) || MISSION_RULES[level.mission].untimed;
   const questProgress = Math.min(100, Math.round((completedWords / level.targetWords) * 100));
   const isFever = combo >= 12;
   const playerLevel = getPlayerLevel(progress.xp);
@@ -113,6 +121,9 @@ export default function Home() {
   const missionProgressValue = level.mission === "guardian" ? Math.max(0, level.targetWords - completedWords) : completedWords;
   const lessonAct = getLessonAct(level, completedWords);
   const lessonActCopy = lessonAct === "learn" ? "认识新键" : lessonAct === "practice" ? "组合练习" : "剧情挑战";
+  const fireflyRound = level.mission === "firefly" ? Math.min(3, Math.floor(elapsed / 22) + 1) : 1;
+  const fireflyResting = level.mission === "firefly" && elapsed > 0 && elapsed % 22 >= 20;
+  const guardianState = getGuardianState(level, completedWords);
 
   const levelLabel = useMemo(() => `${level.title}，${level.goal}`, [level]);
 
@@ -183,7 +194,7 @@ export default function Home() {
     finishingRef.current = true;
     const final = snapshot ?? sessionRef.current;
     const elapsedSeconds = Math.max(1, final.elapsed || (Date.now() - startedAt.current) / 1000);
-    const finalResult = calculateGardenResult(level, final.correctHits, final.mistakes, elapsedSeconds, final.completedWords, final.bestCombo);
+    const finalResult = calculateGardenResult(level, final.correctHits, final.mistakes, elapsedSeconds, final.completedWords, final.bestCombo, missionBonusRef.current);
     setElapsed(elapsedSeconds);
     setResult(finalResult);
     setPhase("complete");
@@ -204,12 +215,19 @@ export default function Home() {
     const timer = window.setInterval(() => {
       const nextElapsed = (Date.now() - startedAt.current) / 1000;
       setElapsed(nextElapsed);
-      if (!calmSession && nextElapsed >= level.duration) {
-        finishGame({ ...sessionRef.current, elapsed: level.duration });
+      if (level.mission === "firefly") {
+        const round = Math.min(3, Math.floor(nextElapsed / 22) + 1);
+        if (round !== lastMissionRoundRef.current) {
+          lastMissionRoundRef.current = round;
+          showToast(`第 ${round} 轮萤火冲刺 · 深呼吸再出发`);
+        }
+      }
+      if (!calmSession && missionDuration !== null && nextElapsed >= missionDuration) {
+        finishGame({ ...sessionRef.current, elapsed: missionDuration });
       }
     }, 180);
     return () => window.clearInterval(timer);
-  }, [calmSession, finishGame, level.duration, phase]);
+  }, [calmSession, finishGame, level.mission, missionDuration, phase, showToast]);
 
   const beginSession = useCallback(() => {
     setTyped("");
@@ -223,6 +241,10 @@ export default function Home() {
     setFlash(null);
     setToast("");
     setWrongStreak(0);
+    setMissionBonus(0);
+    setRhythmHits(0);
+    missionBonusRef.current = 0;
+    lastMissionRoundRef.current = 1;
     finishingRef.current = false;
     sessionRef.current = { correctHits: 0, mistakes: 0, completedWords: 0, bestCombo: 0, elapsed: 0 };
     sessionKeyStatsRef.current = {};
@@ -323,8 +345,13 @@ export default function Home() {
     });
   }, [combo]);
 
+  const addMissionBonus = useCallback((amount: number) => {
+    missionBonusRef.current += amount;
+    setMissionBonus(missionBonusRef.current);
+  }, []);
+
   const handleKey = useCallback((key: string) => {
-    if (phase !== "playing" || finishingRef.current || !target) return;
+    if (phase !== "playing" || finishingRef.current || !target || fireflyResting) return;
     const outcome = evaluateTypingKey(word, typed.length, key);
     if (outcome === "correct" || outcome === "complete") {
       const nextCorrect = correctHits + 1;
@@ -332,6 +359,20 @@ export default function Home() {
       const nextBest = Math.max(bestCombo, nextCombo);
       const nextTyped = typed + target;
       recordKeyAttempt(target, true);
+      if (level.mission === "rhythm") {
+        const beat = ((Date.now() - startedAt.current) / 1000) % 1;
+        if (beat <= 0.2 || beat >= 0.8) {
+          setRhythmHits((current) => current + 1);
+          addMissionBonus(25);
+          if ((rhythmHits + 1) % 5 === 0) showToast("完美拍点 · 月光和弦 +125");
+        }
+      } else if (level.mission === "firefly" && outcome === "complete") {
+        addMissionBonus(15 * fireflyRound);
+      } else if (level.mission === "guardian" && outcome === "complete") {
+        addMissionBonus(30 + Math.min(70, nextCombo * 2));
+      } else if (level.mission === "bloom" && outcome === "complete") {
+        addMissionBonus(mistakes === 0 ? 20 : 8);
+      }
       setCorrectHits(nextCorrect);
       setCombo(nextCombo);
       setBestCombo(nextBest);
@@ -348,6 +389,7 @@ export default function Home() {
         playTone("word");
         if (nextCompleted === 5) showToast("花灵苏醒 · 第一重结界解除");
         if (nextCompleted === Math.ceil(level.targetWords / 2)) showToast("旅程过半 · 月兔为你加油");
+        if (level.mission === "guardian" && (nextCompleted === Math.ceil(level.targetWords / 3) || nextCompleted === Math.ceil(level.targetWords * 2 / 3))) showToast("护盾破裂 · Boss 进入下一阶段");
         if (nextCompleted >= level.targetWords) {
           const snapshot = { correctHits: nextCorrect, mistakes, completedWords: nextCompleted, bestCombo: nextBest, elapsed: (Date.now() - startedAt.current) / 1000 };
           sessionRef.current = snapshot;
@@ -373,7 +415,7 @@ export default function Home() {
       playTone("wrong");
       showFlash("wrong");
     }
-  }, [bestCombo, combo, completedWords, correctHits, finishGame, level.targetWords, mistakes, phase, playTone, recordKeyAttempt, reducedMotion, showFlash, showToast, target, targetLabel, typed, word]);
+  }, [addMissionBonus, bestCombo, combo, completedWords, correctHits, finishGame, fireflyResting, fireflyRound, level.mission, level.targetWords, mistakes, phase, playTone, recordKeyAttempt, reducedMotion, rhythmHits, showFlash, showToast, target, targetLabel, typed, word]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -511,13 +553,20 @@ export default function Home() {
             <small>{lessonActCopy} · 本课新键 {level.newKeys.map((key) => key === "space" ? "空格" : key === "shift" ? "Shift" : key === "comma" ? "," : key === "period" ? "." : key === "apostrophe" ? "'" : key.toUpperCase()).join(" · ")}</small>
           </div>
           <div className="session-hud">
-            <span><small>{calmSession ? "学习模式" : "剩余时间"}</small><b className={!calmSession && timeLeft <= 10 ? "danger" : ""}>{calmSession ? "∞" : timeLeft}{!calmSession && <i>s</i>}</b></span>
+            <span><small>{calmSession ? "学习模式" : "剩余时间"}</small><b className={!calmSession && timeLeft !== null && timeLeft <= 10 ? "danger" : ""}>{calmSession ? "∞" : timeLeft}{!calmSession && <i>s</i>}</b></span>
             <span><small>星愿积分</small><b>{score}</b></span>
             <button onClick={pauseGame} aria-label="暂停游戏">Ⅱ</button>
           </div>
 
           <div className={`combo-ribbon ${combo >= 5 ? "active" : ""}`}>
             <small>MAGIC COMBO</small><strong>{combo}<i>×</i></strong><span>{isFever ? "星愿时刻" : combo >= 5 ? "魔力上升" : "连续输入积蓄魔力"}</span>
+          </div>
+
+          <div className={`mission-mechanic mechanic-${level.mission}`} aria-live="polite">
+            {level.mission === "bloom" && <><span className="mechanic-icon">❀</span><div><small>花朵成长</small><strong>{completedWords}/{level.targetWords}</strong><i style={{ width: `${questProgress}%` }} /></div><b>稳定输入，不限时间</b></>}
+            {level.mission === "firefly" && <><span className="mechanic-icon">✦</span><div><small>萤火冲刺 · 第 {fireflyRound}/3 轮</small><strong>{fireflyResting ? "休息一下" : "追光中"}</strong><i style={{ width: `${Math.min(100, ((elapsed % 22) / 20) * 100)}%` }} /></div><b>光能 +{missionBonus}</b></>}
+            {level.mission === "rhythm" && <><span className="mechanic-icon beat-orb">♫</span><div><small>月光节拍</small><strong>{rhythmHits} 次完美拍点</strong><i className="beat-track" /></div><b>奖励 +{missionBonus}</b></>}
+            {level.mission === "guardian" && <><span className="mechanic-icon boss-core">♛</span><div><small>守护者 · 第 {guardianState.phase}/3 阶段</small><strong>护盾 {guardianState.hpPercent}%</strong><i style={{ width: `${guardianState.hpPercent}%` }} /></div><b>蓄力 +{missionBonus}</b></>}
           </div>
 
           <div className="spell-console">
@@ -561,7 +610,7 @@ export default function Home() {
             <h2>{result.won ? "花园重新绽放啦！" : "你的魔法正在变强"}</h2>
             <p>{result.won ? `你和露米完成了「${level.title}」的守护任务。` : `再唤醒 ${Math.max(0, level.targetWords - completedWords)} 朵花，就能点亮这一章。`}</p>
             <div className="result-stars" aria-label={`获得 ${result.stars} 颗星`}>{[0, 1, 2].map((star) => <span key={star} className={star < result.stars ? "earned" : ""}>★</span>)}</div>
-            <div className="result-score"><small>本局星愿积分</small><strong>{result.score}</strong><span>历史最佳 {progress.bestScores[level.id]} · +{result.xp} XP</span></div>
+            <div className="result-score"><small>本局星愿积分</small><strong>{result.score}</strong><span>任务奖励 +{result.missionBonus} · 历史最佳 {progress.bestScores[level.id]} · +{result.xp} XP</span></div>
             <div className="result-grid">
               <span><i>◎</i><small>准确率</small><strong>{result.accuracy}%</strong></span>
               <span><i>⌁</i><small>打字速度</small><strong>{result.wpm}<em> WPM</em></strong></span>

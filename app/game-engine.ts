@@ -46,6 +46,14 @@ export type SessionKeyStat = { attempts: number; correct: number; bestStreak: nu
 export type SessionKeyStats = Record<string, SessionKeyStat>;
 export type LessonAct = "learn" | "practice" | "adventure";
 
+export type MissionRules = {
+  name: string;
+  verb: string;
+  hint: string;
+  untimed: boolean;
+  durationOverride?: number;
+};
+
 export type GardenResult = {
   accuracy: number;
   wpm: number;
@@ -53,6 +61,7 @@ export type GardenResult = {
   stars: number;
   petals: number;
   xp: number;
+  missionBonus: number;
   won: boolean;
 };
 
@@ -100,6 +109,13 @@ export const GARDEN_WORLDS: readonly GardenWorld[] = [
   { id: "cloud-kingdom", number: "WORLD 03", name: "云上王城", subtitle: "彩虹书页", icon: "☁", accent: "#70cfee", story: "穿越云朵车站，在风暴到来前修复王城图书馆。" },
   { id: "aurora-temple", number: "WORLD 04", name: "极光圣殿", subtitle: "永恒星愿", icon: "✦", accent: "#66e0c9", story: "集齐四界光芒，完成守护花园的最终加冕。" },
 ] as const;
+
+export const MISSION_RULES: Record<MissionType, MissionRules> = {
+  bloom: { name: "花灵唤醒", verb: "让花朵生长", hint: "没有倒计时，稳定输入最重要", untimed: true },
+  firefly: { name: "萤火竞速", verb: "追上萤火光带", hint: "三轮 20 秒冲刺，每轮之间休息 2 秒", untimed: false, durationOverride: 66 },
+  rhythm: { name: "节奏短句", verb: "跟随月光节拍", hint: "在光圈最亮时输入可获得拍点奖励", untimed: false },
+  guardian: { name: "守护者 Boss", verb: "击破三重护盾", hint: "完整词语造成伤害，连击积蓄终结魔法", untimed: false },
+};
 
 export const GARDEN_LEVELS: readonly GardenLevel[] = [
   {
@@ -253,9 +269,19 @@ export function getPlayerLevelProgress(xp: number): number {
   return Math.round(((xp - floor) / Math.max(1, ceiling - floor)) * 100);
 }
 
-export function getLiveScore(level: GardenLevel, correctKeys: number, mistakes: number, completedWords: number, bestCombo: number): number {
+export function getLiveScore(level: GardenLevel, correctKeys: number, mistakes: number, completedWords: number, bestCombo: number, missionBonus = 0): number {
   const multiplier = level.mission === "guardian" ? 1.2 : level.mission === "rhythm" ? 1.12 : level.mission === "firefly" ? 1.06 : 1;
-  return Math.max(0, Math.round((correctKeys * 9 + completedWords * 70 + bestCombo * 4 - mistakes * 4) * multiplier));
+  return Math.max(0, Math.round((correctKeys * 9 + completedWords * 70 + bestCombo * 4 - mistakes * 4) * multiplier + missionBonus));
+}
+
+export function getMissionDuration(level: GardenLevel): number | null {
+  const rules = MISSION_RULES[level.mission];
+  return rules.untimed ? null : rules.durationOverride ?? level.duration;
+}
+
+export function getGuardianState(level: GardenLevel, completedWords: number): { hpPercent: number; phase: number } {
+  const hpPercent = Math.max(0, Math.round((1 - completedWords / Math.max(1, level.targetWords)) * 100));
+  return { hpPercent, phase: hpPercent > 66 ? 1 : hpPercent > 33 ? 2 : 3 };
 }
 
 export function evaluateTypingKey(word: string, typedLength: number, key: string): "correct" | "complete" | "wrong" | "ignored" {
@@ -267,15 +293,15 @@ export function evaluateTypingKey(word: string, typedLength: number, key: string
   return typedLength + 1 >= word.length ? "complete" : "correct";
 }
 
-export function calculateGardenResult(level: GardenLevel, correctKeys: number, mistakes: number, elapsedSeconds: number, completedWords: number, bestCombo: number): GardenResult {
+export function calculateGardenResult(level: GardenLevel, correctKeys: number, mistakes: number, elapsedSeconds: number, completedWords: number, bestCombo: number, missionBonus = 0): GardenResult {
   const accuracy = Math.round((correctKeys / Math.max(1, correctKeys + mistakes)) * 100);
   const wpm = Math.round(correctKeys / 5 / (Math.max(1, elapsedSeconds) / 60));
-  const score = getLiveScore(level, correctKeys, mistakes, completedWords, bestCombo);
+  const score = getLiveScore(level, correctKeys, mistakes, completedWords, bestCombo, missionBonus);
   const won = completedWords >= level.targetWords && accuracy >= 85;
   const stars = won && accuracy >= 97 ? 3 : won && accuracy >= 90 ? 2 : won ? 1 : 0;
   const petals = stars * 12 + completedWords * 2 + (level.mission === "guardian" && won ? 12 : 0);
   const xp = completedWords * 8 + stars * 18 + Math.floor(bestCombo / 5) * 3;
-  return { accuracy, wpm, score, stars, petals, xp, won };
+  return { accuracy, wpm, score, stars, petals, xp, missionBonus, won };
 }
 
 export function unlockAchievements(progress: GardenProgress, levelIndex: number, result: GardenResult, bestCombo: number): string[] {

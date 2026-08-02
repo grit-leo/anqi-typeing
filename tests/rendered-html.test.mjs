@@ -72,6 +72,9 @@ test("includes real WebGL, large-game systems, touch input, safety and persisten
   assert.match(page, /正在热身/);
   assert.match(page, /claimDailyReward/);
   assert.match(page, /buyOrEquipCosmetic/);
+  assert.match(page, /mission-mechanic/);
+  assert.match(page, /fireflyResting/);
+  assert.match(page, /rhythmHits/);
 
   assert.match(hub, /GARDEN_WORLDS/);
   assert.match(hub, /GARDEN_LEVELS/);
@@ -96,6 +99,8 @@ test("includes real WebGL, large-game systems, touch input, safety and persisten
   assert.match(stage, /pointermove/);
   assert.match(stage, /prefers-reduced-motion/);
   assert.match(stage, /garden-stage-fallback/);
+  assert.match(stage, /rhythmRings/);
+  assert.match(stage, /guardianCrown/);
   assert.match(engine, /targetWords/);
   assert.match(engine, /bestScores/);
   assert.match(engine, /GardenWorldId/);
@@ -104,6 +109,8 @@ test("includes real WebGL, large-game systems, touch input, safety and persisten
   assert.match(engine, /unlockAchievements/);
   assert.match(engine, /newKeys/);
   assert.match(engine, /mergeKeyMastery/);
+  assert.match(engine, /MISSION_RULES/);
+  assert.match(engine, /getGuardianState/);
 
   assert.match(css, /height:100dvh/);
   assert.match(css, /\.spell-console/);

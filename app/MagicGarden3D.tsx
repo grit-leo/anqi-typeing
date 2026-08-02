@@ -418,6 +418,30 @@ export function MagicGarden3D(props: MagicGarden3DProps) {
       wisp.add(wing);
     });
 
+    const rhythmRings = new THREE.Group();
+    [0.92, 1.12, 1.34].forEach((radius, index) => {
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(radius, 0.018 + index * 0.006, 7, 72),
+        new THREE.MeshBasicMaterial({ color: index === 1 ? 0xffd86f : 0x77e7dc, transparent: true, opacity: 0.48, blending: THREE.AdditiveBlending }),
+      );
+      ring.rotation.x = Math.PI / 2;
+      rhythmRings.add(ring);
+    });
+    wisp.add(rhythmRings);
+
+    const guardianCrown = new THREE.Group();
+    for (let index = 0; index < 5; index += 1) {
+      const spike = new THREE.Mesh(
+        new THREE.ConeGeometry(0.11, 0.55, 7),
+        new THREE.MeshStandardMaterial({ color: 0xff668f, emissive: 0x8d234e, emissiveIntensity: 0.9, roughness: 0.34 }),
+      );
+      const angle = (index / 5) * Math.PI * 2;
+      spike.position.set(Math.cos(angle) * 0.58, 0.56, Math.sin(angle) * 0.58);
+      spike.rotation.z = Math.cos(angle) * 0.45;
+      guardianCrown.add(spike);
+    }
+    wisp.add(guardianCrown);
+
     const labelCanvas = document.createElement("canvas");
     labelCanvas.width = 760;
     labelCanvas.height = 220;
@@ -481,6 +505,7 @@ export function MagicGarden3D(props: MagicGarden3DProps) {
     const pointerTarget = new THREE.Vector2();
     const pointerCurrent = new THREE.Vector2();
     const cameraTarget = new THREE.Vector3(0, 1.05, -1.8);
+    const bloomScaleTarget = new THREE.Vector3(1, 1, 1);
     const clock = new THREE.Clock();
     let frame = 0;
     let visible = true;
@@ -551,6 +576,9 @@ export function MagicGarden3D(props: MagicGarden3DProps) {
       crystalWorld.visible = live.worldIndex === 1 || live.worldIndex === 3;
       cloudWorld.visible = live.worldIndex === 2;
       auroraWorld.visible = live.worldIndex === 3;
+      fireflies.visible = live.mission === "firefly";
+      rhythmRings.visible = live.mission === "rhythm";
+      guardianCrown.visible = live.mission === "guardian";
 
       if (live.word !== lastWord) {
         paintWord(labelCanvas, live.word, live.typedLength);
@@ -598,6 +626,14 @@ export function MagicGarden3D(props: MagicGarden3DProps) {
       wispCore.scale.setScalar(missionScale + pulse * 0.22);
       halo.scale.setScalar(live.mission === "guardian" ? 1.2 : 1);
       magicLight.intensity = 18 + Math.min(20, live.combo * 0.7) + pulse * 20 + (live.mission === "guardian" ? 8 : 0);
+      const bloomScale = live.mission === "bloom" ? 0.82 + Math.min(0.32, live.completedWords * 0.025) : 1;
+      bloomScaleTarget.setScalar(bloomScale);
+      flowerGroup.scale.lerp(bloomScaleTarget, 0.035);
+      guardianCrown.rotation.y += delta * (0.45 + live.combo * 0.01);
+      rhythmRings.children.forEach((ring, index) => {
+        const beat = 1 + Math.sin(time * Math.PI * 2 + index * 0.6) * 0.1;
+        ring.scale.setScalar(beat);
+      });
       missLight.intensity = THREE.MathUtils.lerp(missLight.intensity, 0, 0.12);
       beamMaterial.opacity = time < beamUntil ? Math.max(0, (beamUntil - time) * 8.2) : 0;
 
@@ -624,8 +660,8 @@ export function MagicGarden3D(props: MagicGarden3DProps) {
           mote.position.y += Math.sin(time * (0.55 + index * 0.07) + index) * 0.0008;
           mote.rotation.z += delta * (0.16 + index * 0.04);
         });
-        fireflies.rotation.y += delta * 0.012;
-        fireflies.position.y = Math.sin(time * 0.35) * 0.18;
+        fireflies.rotation.y += delta * (live.mission === "firefly" ? 0.16 : 0.012);
+        fireflies.position.y = Math.sin(time * (live.mission === "firefly" ? 1.4 : 0.35)) * 0.18;
         pond.material.opacity = 0.62 + Math.sin(time * 0.9) * 0.05;
         cloudWorld.rotation.y = Math.sin(time * 0.12) * 0.035;
         auroraWorld.position.y = Math.sin(time * 0.32) * 0.13;
