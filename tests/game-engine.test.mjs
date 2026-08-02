@@ -12,6 +12,8 @@ import {
   GARDEN_LEVELS,
   GARDEN_WORLDS,
   getDailyTarget,
+  getAdaptiveLevelWord,
+  getEarnedPetals,
   getLevelWord,
   getLessonAct,
   getLevelMastery,
@@ -20,7 +22,10 @@ import {
   getLiveScore,
   getPlayerLevel,
   getPlayerLevelProgress,
+  getSuggestedReviewLevel,
+  getWeakKeys,
   mergeKeyMastery,
+  migrateGardenProgress,
   MISSION_RULES,
 } from "../app/game-engine.ts";
 
@@ -135,4 +140,44 @@ test("player level curve is monotonic and exposes bounded progress", () => {
   assert.equal(getPlayerLevel(0), 1);
   assert.ok(getPlayerLevel(1000) > getPlayerLevel(100));
   assert.ok(getPlayerLevelProgress(240) >= 0 && getPlayerLevelProgress(240) <= 100);
+});
+
+test("old saves migrate safely and retain one best-star total per level", () => {
+  const migrated = migrateGardenProgress({
+    unlocked: 3,
+    totalStars: 5,
+    bestScores: { ...DEFAULT_GARDEN_PROGRESS.bestScores, "petal-gate": 1200, "firefly-post": 900 },
+  });
+  assert.equal(migrated.schemaVersion, 2);
+  assert.equal(migrated.totalStars, 5);
+  assert.equal(migrated.bestStars["petal-gate"], 3);
+  assert.equal(migrated.bestStars["firefly-post"], 2);
+  assert.equal(migrated.bestScores["petal-gate"], 1200);
+  assert.deepEqual(migrated.sessionHistory, []);
+});
+
+test("practice adapts to weak keys and recommends an unlocked review lesson", () => {
+  const mastery = {
+    f: { attempts: 12, correct: 5, streak: 0, score: 42 },
+    j: { attempts: 12, correct: 11, streak: 6, score: 92 },
+  };
+  assert.deepEqual(getWeakKeys(mastery), ["f"]);
+  const word = getAdaptiveLevelWord(GARDEN_LEVELS[0], 3, mastery);
+  assert.match(word, /f/i);
+  const reviewIndex = getSuggestedReviewLevel({ ...DEFAULT_GARDEN_PROGRESS, unlocked: 4, keyMastery: mastery });
+  assert.equal(reviewIndex, 0);
+});
+
+test("replaying cannot farm permanent stars or full first-clear petals", () => {
+  const first = GARDEN_LEVELS[0];
+  const win = calculateGardenResult(first, 50, 0, 60, first.targetWords, 25);
+  const once = applyGardenResult(DEFAULT_GARDEN_PROGRESS, 0, win, first.targetWords, 25, "2026-08-03");
+  const replayReward = getEarnedPetals(once, first, win, first.targetWords);
+  const twice = applyGardenResult(once, 0, win, first.targetWords, 25, "2026-08-03");
+  assert.equal(once.totalStars, 3);
+  assert.equal(twice.totalStars, 3);
+  assert.equal(replayReward, 6);
+  assert.equal(twice.petals - once.petals, 6);
+  assert.equal(twice.sessionHistory.length, 2);
+  assert.equal(twice.sessionHistory.at(-1).duration, 60);
 });

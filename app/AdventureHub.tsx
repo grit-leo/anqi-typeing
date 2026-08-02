@@ -11,17 +11,20 @@ import {
   getPlayerLevel,
   getPlayerLevelProgress,
   getLevelMastery,
+  getSuggestedReviewLevel,
+  getWeakKeys,
   type GardenProgress,
   type MissionType,
 } from "./game-engine";
 
-type HubView = "map" | "daily" | "collection" | "achievements";
+type HubView = "map" | "review" | "daily" | "collection" | "achievements";
 
 type AdventureHubProps = {
   progress: GardenProgress;
   levelIndex: number;
   onChooseLevel: (index: number) => void;
   onStart: () => void;
+  onStartReview: (index: number) => void;
   onClaimDaily: () => void;
   onCosmetic: (id: string) => void;
 };
@@ -33,7 +36,9 @@ const MISSION_COPY: Record<MissionType, { icon: string; name: string }> = {
   guardian: { icon: "♛", name: "守护者 Boss" },
 };
 
-export function AdventureHub({ progress, levelIndex, onChooseLevel, onStart, onClaimDaily, onCosmetic }: AdventureHubProps) {
+const KEY_NAME: Record<string, string> = { space: "空格", shift: "Shift", comma: "逗号", period: "句号", apostrophe: "撇号" };
+
+export function AdventureHub({ progress, levelIndex, onChooseLevel, onStart, onStartReview, onClaimDaily, onCosmetic }: AdventureHubProps) {
   const [view, setView] = useState<HubView>("map");
   const [worldIndex, setWorldIndex] = useState(GARDEN_LEVELS[levelIndex].worldIndex);
   const dateKey = getLocalDateKey();
@@ -48,6 +53,9 @@ export function AdventureHub({ progress, levelIndex, onChooseLevel, onStart, onC
   const world = GARDEN_WORLDS[worldIndex];
   const unlockedAchievements = new Set(progress.achievements);
   const selectedMastery = getLevelMastery(GARDEN_LEVELS[levelIndex], progress.keyMastery);
+  const weakKeys = getWeakKeys(progress.keyMastery, 5);
+  const reviewLevelIndex = getSuggestedReviewLevel(progress);
+  const reviewLevel = GARDEN_LEVELS[reviewLevelIndex];
 
   const chooseWorld = (index: number) => {
     const firstLevelIndex = index * 3;
@@ -61,6 +69,7 @@ export function AdventureHub({ progress, levelIndex, onChooseLevel, onStart, onC
     <section className="adventure-hub" aria-label="大型冒险中心">
       <nav className="hub-nav" aria-label="冒险中心功能">
         <button className={view === "map" ? "active" : ""} onClick={() => setView("map")}><i>⌁</i><span>世界地图</span></button>
+        <button className={view === "review" ? "active" : ""} onClick={() => setView("review")}><i>⌨</i><span>露米复习屋</span>{weakKeys.length > 0 && <b />}</button>
         <button className={view === "daily" ? "active" : ""} onClick={() => setView("daily")}><i>☀</i><span>每日委托</span>{!dailyClaimed && dailyWords >= dailyTarget && <b />}</button>
         <button className={view === "collection" ? "active" : ""} onClick={() => setView("collection")}><i>♢</i><span>魔法衣橱</span></button>
         <button className={view === "achievements" ? "active" : ""} onClick={() => setView("achievements")}><i>♛</i><span>成就图鉴</span></button>
@@ -95,6 +104,7 @@ export function AdventureHub({ progress, levelIndex, onChooseLevel, onStart, onC
                     <strong>{level.title}</strong>
                     <em><i>{mission.icon}</i>{mission.name}</em>
                     {progress.bestScores[level.id] > 0 && <b>{progress.bestScores[level.id]} 分</b>}
+                    <span className="stage-stars" aria-label={`最佳 ${progress.bestStars[level.id] ?? 0} 颗星`}>{[0, 1, 2].map((star) => <i key={star} className={star < (progress.bestStars[level.id] ?? 0) ? "earned" : ""}>★</i>)}</span>
                   </button>
                 );
               })}
@@ -104,6 +114,17 @@ export function AdventureHub({ progress, levelIndex, onChooseLevel, onStart, onC
               <span><i>{MISSION_COPY[GARDEN_LEVELS[levelIndex].mission].icon}</i><small>{GARDEN_LEVELS[levelIndex].lesson} · 掌握度 {selectedMastery}%</small><strong>{GARDEN_LEVELS[levelIndex].goal}</strong></span>
               <button onClick={onStart}>进入关卡 <b>→</b></button>
             </div>
+          </div>
+        )}
+
+        {view === "review" && (
+          <div className="review-view">
+            <div className="review-hero"><span>⌨</span><div><small>LUMI&apos;S PRACTICE ROOM</small><h3>露米复习屋</h3><p>每次只练几分钟，把容易按错的键重新变成魔法。</p></div></div>
+            <div className="weak-key-panel">
+              <div><small>本机学习画像</small><h4>{weakKeys.length ? "这些键需要再熟悉一点" : "暂时没有明显弱键"}</h4><p>{weakKeys.length ? "系统会把它们放进接下来的练习，但不会连续惩罚你。" : "继续完成当前课程，露米会慢慢认识你的学习节奏。"}</p></div>
+              <div className="weak-key-list">{weakKeys.length ? weakKeys.map((key) => <span key={key}><b>{KEY_NAME[key] ?? key.toUpperCase()}</b><small>{progress.keyMastery[key]?.score ?? 0}% 掌握</small></span>) : <span className="all-clear"><b>✦</b><small>准备探索新键</small></span>}</div>
+            </div>
+            <div className="review-mission"><span><i>✿</i><small>推荐复习关</small><strong>{reviewLevel.chapter} · {reviewLevel.title}</strong><em>{reviewLevel.lesson}</em></span><button onClick={() => onStartReview(reviewLevelIndex)}>开始 5 分钟复习 <b>→</b></button></div>
           </div>
         )}
 

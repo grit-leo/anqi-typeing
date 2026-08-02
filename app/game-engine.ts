@@ -62,7 +62,19 @@ export type GardenResult = {
   petals: number;
   xp: number;
   missionBonus: number;
+  duration: number;
   won: boolean;
+};
+
+export type SessionRecord = {
+  date: string;
+  levelId: GardenLevelId;
+  accuracy: number;
+  wpm: number;
+  duration: number;
+  completedWords: number;
+  stars: number;
+  weakKeys: string[];
 };
 
 export type DailyProgress = {
@@ -80,11 +92,13 @@ export type GardenProgress = {
   totalWords: number;
   xp: number;
   bestScores: Record<GardenLevelId, number>;
+  bestStars: Record<GardenLevelId, number>;
   achievements: string[];
   ownedCosmetics: string[];
   equippedCosmetic: string;
   daily: DailyProgress;
   keyMastery: Record<string, KeyMastery>;
+  sessionHistory: SessionRecord[];
 };
 
 export type Cosmetic = {
@@ -203,6 +217,10 @@ function emptyBestScores(): Record<GardenLevelId, number> {
   return Object.fromEntries(GARDEN_LEVELS.map((level) => [level.id, 0])) as Record<GardenLevelId, number>;
 }
 
+function emptyBestStars(): Record<GardenLevelId, number> {
+  return Object.fromEntries(GARDEN_LEVELS.map((level) => [level.id, 0])) as Record<GardenLevelId, number>;
+}
+
 export function getLocalDateKey(date = new Date()): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -212,7 +230,7 @@ export function getLocalDateKey(date = new Date()): string {
 
 export function getDailyTarget(dateKey: string): number {
   const digitSum = [...dateKey].reduce((sum, character) => sum + (Number(character) || 0), 0);
-  return 18 + (digitSum % 5);
+  return 12 + (digitSum % 5);
 }
 
 export const DEFAULT_GARDEN_PROGRESS: GardenProgress = {
@@ -223,12 +241,42 @@ export const DEFAULT_GARDEN_PROGRESS: GardenProgress = {
   totalWords: 0,
   xp: 0,
   bestScores: emptyBestScores(),
+  bestStars: emptyBestStars(),
   achievements: [],
   ownedCosmetics: ["violet-wand"],
   equippedCosmetic: "violet-wand",
   daily: { date: "", words: 0, sessions: 0, claimed: false },
   keyMastery: {},
+  sessionHistory: [],
 };
+
+export function migrateGardenProgress(raw?: Partial<GardenProgress> | null): GardenProgress {
+  if (!raw) return DEFAULT_GARDEN_PROGRESS;
+  const bestStars = { ...emptyBestStars(), ...(raw.bestStars ?? {}) };
+  if (!raw.bestStars && (raw.totalStars ?? 0) > 0) {
+    let remaining = raw.totalStars ?? 0;
+    GARDEN_LEVELS.forEach((level, index) => {
+      if (remaining <= 0 || (index >= (raw.unlocked ?? 1) - 1 && !raw.bestScores?.[level.id])) return;
+      const stars = Math.min(3, remaining);
+      bestStars[level.id] = stars;
+      remaining -= stars;
+    });
+  }
+  return {
+    ...DEFAULT_GARDEN_PROGRESS,
+    ...raw,
+    schemaVersion: 2,
+    bestScores: { ...DEFAULT_GARDEN_PROGRESS.bestScores, ...(raw.bestScores ?? {}) },
+    bestStars,
+    totalStars: Object.values(bestStars).reduce((sum, stars) => sum + stars, 0),
+    achievements: raw.achievements ?? [],
+    ownedCosmetics: raw.ownedCosmetics ?? ["violet-wand"],
+    equippedCosmetic: raw.equippedCosmetic ?? "violet-wand",
+    daily: { ...DEFAULT_GARDEN_PROGRESS.daily, ...(raw.daily ?? {}) },
+    keyMastery: raw.keyMastery ?? {},
+    sessionHistory: (raw.sessionHistory ?? []).slice(-30),
+  };
+}
 
 export function getLessonAct(level: GardenLevel, completedWords: number): LessonAct {
   const ratio = completedWords / Math.max(1, level.targetWords);
@@ -256,6 +304,37 @@ export function mergeKeyMastery(current: Record<string, KeyMastery>, session: Se
 
 export function getLevelWord(level: GardenLevel, completedWords: number): string {
   return level.words[completedWords % level.words.length];
+}
+
+function wordHasKey(word: string, key: string): boolean {
+  const character = key === "space" ? " " : key === "comma" ? "," : key === "period" ? "." : key === "apostrophe" ? "'" : key;
+  return word.toLowerCase().includes(character);
+}
+
+export function getWeakKeys(mastery: Record<string, KeyMastery>, limit = 5): string[] {
+  return Object.entries(mastery)
+    .filter(([, value]) => value.attempts > 0 && value.score < 85)
+    .sort((left, right) => left[1].score - right[1].score || right[1].attempts - left[1].attempts)
+    .slice(0, limit)
+    .map(([key]) => key);
+}
+
+export function getAdaptiveLevelWord(level: GardenLevel, completedWords: number, mastery: Record<string, KeyMastery>): string {
+  const weakKeys = getWeakKeys(mastery, 8).filter((key) => level.learnedKeys.includes(key));
+  const adaptiveSlot = completedWords % 10;
+  if (weakKeys.length && (adaptiveSlot === 3 || adaptiveSlot === 8)) {
+    const weakKey = weakKeys[Math.floor(completedWords / 5) % weakKeys.length];
+    const candidates = level.words.filter((word) => wordHasKey(word, weakKey));
+    if (candidates.length) return candidates[completedWords % candidates.length];
+  }
+  return getLevelWord(level, completedWords);
+}
+
+export function getSuggestedReviewLevel(progress: GardenProgress): number {
+  const weakest = getWeakKeys(progress.keyMastery, 1)[0];
+  if (!weakest) return Math.max(0, Math.min(progress.unlocked - 1, GARDEN_LEVELS.length - 1));
+  const index = GARDEN_LEVELS.findIndex((level, levelIndex) => levelIndex < progress.unlocked && level.learnedKeys.includes(weakest));
+  return index >= 0 ? index : 0;
 }
 
 export function getPlayerLevel(xp: number): number {
@@ -301,7 +380,7 @@ export function calculateGardenResult(level: GardenLevel, correctKeys: number, m
   const stars = won && accuracy >= 97 ? 3 : won && accuracy >= 90 ? 2 : won ? 1 : 0;
   const petals = stars * 12 + completedWords * 2 + (level.mission === "guardian" && won ? 12 : 0);
   const xp = completedWords * 8 + stars * 18 + Math.floor(bestCombo / 5) * 3;
-  return { accuracy, wpm, score, stars, petals, xp, missionBonus, won };
+  return { accuracy, wpm, score, stars, petals, xp, missionBonus, duration: Math.round(elapsedSeconds), won };
 }
 
 export function unlockAchievements(progress: GardenProgress, levelIndex: number, result: GardenResult, bestCombo: number): string[] {
@@ -317,20 +396,32 @@ export function unlockAchievements(progress: GardenProgress, levelIndex: number,
   return [...unlocked];
 }
 
+export function getEarnedPetals(progress: GardenProgress, level: GardenLevel, result: GardenResult, completedWords: number): number {
+  const improvedStars = Math.max(0, result.stars - (progress.bestStars[level.id] ?? 0));
+  return improvedStars > 0 ? result.petals : Math.min(6, completedWords);
+}
+
 export function applyGardenResult(progress: GardenProgress, levelIndex: number, result: GardenResult, completedWords: number, bestCombo: number, dateKey: string, keyStats: SessionKeyStats = {}): GardenProgress {
   const level = GARDEN_LEVELS[levelIndex];
   const unlocked = result.won ? Math.min(GARDEN_LEVELS.length, Math.max(progress.unlocked, levelIndex + 2)) : progress.unlocked;
   const dailyBase = progress.daily.date === dateKey ? progress.daily : { date: dateKey, words: 0, sessions: 0, claimed: false };
+  const keyMastery = mergeKeyMastery(progress.keyMastery, keyStats);
+  const bestStars = { ...progress.bestStars, [level.id]: Math.max(progress.bestStars[level.id] ?? 0, result.stars) };
+  const earnedPetals = getEarnedPetals(progress, level, result, completedWords);
+  const weakKeys = getWeakKeys(keyMastery, 4);
+  const session: SessionRecord = { date: dateKey, levelId: level.id, accuracy: result.accuracy, wpm: result.wpm, duration: result.duration, completedWords, stars: result.stars, weakKeys };
   const next: GardenProgress = {
     ...progress,
     unlocked,
-    totalStars: progress.totalStars + result.stars,
-    petals: progress.petals + result.petals,
+    totalStars: Object.values(bestStars).reduce((sum, stars) => sum + stars, 0),
+    petals: progress.petals + earnedPetals,
     totalWords: progress.totalWords + completedWords,
     xp: progress.xp + result.xp,
     bestScores: { ...progress.bestScores, [level.id]: Math.max(progress.bestScores[level.id], result.score) },
+    bestStars,
     daily: { ...dailyBase, words: dailyBase.words + completedWords, sessions: dailyBase.sessions + 1 },
-    keyMastery: mergeKeyMastery(progress.keyMastery, keyStats),
+    keyMastery,
+    sessionHistory: [...progress.sessionHistory, session].slice(-30),
   };
   next.achievements = unlockAchievements(next, levelIndex, result, bestCombo);
   return next;

@@ -42,10 +42,11 @@ test("server-renders the full-screen Magic Garden commercial game", async () => 
 });
 
 test("includes real WebGL, large-game systems, touch input, safety and persistence", async () => {
-  const [page, hub, keyboard, stage, engine, css, layout, packageJson] = await Promise.all([
+  const [page, hub, keyboard, parentReport, stage, engine, css, layout, packageJson] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/AdventureHub.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/KeyboardCoach.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/ParentReport.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/MagicGarden3D.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/game-engine.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
@@ -75,6 +76,9 @@ test("includes real WebGL, large-game systems, touch input, safety and persisten
   assert.match(page, /mission-mechanic/);
   assert.match(page, /fireflyResting/);
   assert.match(page, /rhythmHits/);
+  assert.match(page, /migrateGardenProgress/);
+  assert.match(page, /parentHoldTimer/);
+  assert.match(page, /按住 2 秒进入/);
 
   assert.match(hub, /GARDEN_WORLDS/);
   assert.match(hub, /GARDEN_LEVELS/);
@@ -84,7 +88,13 @@ test("includes real WebGL, large-game systems, touch input, safety and persisten
   assert.match(hub, /daily-view/);
   assert.match(hub, /collection-view/);
   assert.match(hub, /achievements-view/);
+  assert.match(hub, /review-view/);
+  assert.match(hub, /getWeakKeys/);
   assert.match(hub, /getLevelMastery/);
+
+  assert.match(parentReport, /家长学习报告/);
+  assert.match(parentReport, /只保存在这台设备/);
+  assert.match(parentReport, /最近练习/);
 
   assert.match(keyboard, /keyboard-coach/);
   assert.match(keyboard, /fingerFor/);
@@ -111,12 +121,16 @@ test("includes real WebGL, large-game systems, touch input, safety and persisten
   assert.match(engine, /mergeKeyMastery/);
   assert.match(engine, /MISSION_RULES/);
   assert.match(engine, /getGuardianState/);
+  assert.match(engine, /getAdaptiveLevelWord/);
+  assert.match(engine, /sessionHistory/);
+  assert.match(engine, /bestStars/);
 
   assert.match(css, /height:100dvh/);
   assert.match(css, /\.spell-console/);
   assert.match(css, /\.modal-backdrop/);
   assert.match(css, /\.adventure-hub/);
   assert.match(css, /\.stage-route/);
+  assert.match(css, /\.parent-report-card/);
   assert.match(css, /@media \(max-width:800px\)/);
   assert.match(css, /@media \(prefers-reduced-motion:reduce\)/);
   assert.match(css, /og-v4\.png/);

@@ -10,7 +10,8 @@ import {
   DEFAULT_GARDEN_PROGRESS,
   evaluateTypingKey,
   GARDEN_LEVELS,
-  getLevelWord,
+  getAdaptiveLevelWord,
+  getEarnedPetals,
   getLessonAct,
   getLocalDateKey,
   getLiveScore,
@@ -18,6 +19,7 @@ import {
   getMissionDuration,
   getPlayerLevel,
   MISSION_RULES,
+  migrateGardenProgress,
   type GardenProgress,
   type GardenResult,
   type SessionKeyStats,
@@ -25,6 +27,7 @@ import {
 import { AdventureHub } from "./AdventureHub";
 import { KeyboardCoach } from "./KeyboardCoach";
 import { MagicGarden3D } from "./MagicGarden3D";
+import { ParentReport } from "./ParentReport";
 
 type Phase = "lobby" | "playing" | "paused" | "complete";
 type Flash = "correct" | "wrong" | "word" | null;
@@ -38,25 +41,16 @@ function loadProgress(): GardenProgress {
     const saved = window.localStorage.getItem(PROGRESS_KEY);
     if (saved) {
       const parsed = JSON.parse(saved) as Partial<GardenProgress>;
-      return {
-        ...DEFAULT_GARDEN_PROGRESS,
-        ...parsed,
-        bestScores: { ...DEFAULT_GARDEN_PROGRESS.bestScores, ...parsed.bestScores },
-        achievements: parsed.achievements ?? DEFAULT_GARDEN_PROGRESS.achievements,
-        ownedCosmetics: parsed.ownedCosmetics ?? DEFAULT_GARDEN_PROGRESS.ownedCosmetics,
-        equippedCosmetic: parsed.equippedCosmetic ?? DEFAULT_GARDEN_PROGRESS.equippedCosmetic,
-        daily: { ...DEFAULT_GARDEN_PROGRESS.daily, ...parsed.daily },
-        keyMastery: parsed.keyMastery ?? DEFAULT_GARDEN_PROGRESS.keyMastery,
-      };
+      return migrateGardenProgress(parsed);
     }
     const legacy = window.localStorage.getItem("anqi-typer-progress");
     if (legacy) {
       const parsed = JSON.parse(legacy) as { completed?: string[]; totalStars?: number };
-      return {
+      return migrateGardenProgress({
         ...DEFAULT_GARDEN_PROGRESS,
         unlocked: Math.min(3, Math.max(1, 1 + Math.floor((parsed.completed?.length ?? 0) / 2))),
         totalStars: parsed.totalStars ?? 0,
-      };
+      });
     }
   } catch {
     // The full game remains playable when browser storage is unavailable.
@@ -88,12 +82,15 @@ export default function Home() {
   const [wrongStreak, setWrongStreak] = useState(0);
   const [missionBonus, setMissionBonus] = useState(0);
   const [rhythmHits, setRhythmHits] = useState(0);
+  const [reviewMode, setReviewMode] = useState(false);
+  const [parentReportOpen, setParentReportOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const startedAt = useRef(0);
   const finishingRef = useRef(false);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const finishTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const parentHoldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const settingsResumeRef = useRef(false);
   const missionBonusRef = useRef(0);
   const lastMissionRoundRef = useRef(1);
@@ -103,7 +100,7 @@ export default function Home() {
   const sessionKeyStatsRef = useRef<SessionKeyStats>({});
 
   const level = GARDEN_LEVELS[levelIndex];
-  const word = getLevelWord(level, completedWords);
+  const word = getAdaptiveLevelWord(level, completedWords, progress.keyMastery);
   const target = word[typed.length] ?? "";
   const targetLabel = target === " " ? "空格" : target === "," ? "逗号" : target === "." ? "句号" : target === "'" ? "撇号" : target.toUpperCase();
   const missionDuration = getMissionDuration(level);
@@ -148,6 +145,7 @@ export default function Home() {
     if (flashTimer.current) clearTimeout(flashTimer.current);
     if (finishTimer.current) clearTimeout(finishTimer.current);
     if (toastTimer.current) clearTimeout(toastTimer.current);
+    if (parentHoldTimer.current) clearTimeout(parentHoldTimer.current);
     void audioContextRef.current?.close();
   }, []);
 
@@ -194,7 +192,8 @@ export default function Home() {
     finishingRef.current = true;
     const final = snapshot ?? sessionRef.current;
     const elapsedSeconds = Math.max(1, final.elapsed || (Date.now() - startedAt.current) / 1000);
-    const finalResult = calculateGardenResult(level, final.correctHits, final.mistakes, elapsedSeconds, final.completedWords, final.bestCombo, missionBonusRef.current);
+    const calculated = calculateGardenResult(level, final.correctHits, final.mistakes, elapsedSeconds, final.completedWords, final.bestCombo, missionBonusRef.current);
+    const finalResult = { ...calculated, petals: getEarnedPetals(progress, level, calculated, final.completedWords) };
     setElapsed(elapsedSeconds);
     setResult(finalResult);
     setPhase("complete");
@@ -208,7 +207,7 @@ export default function Home() {
       }
       return next;
     });
-  }, [level, levelIndex, playTone]);
+  }, [level, levelIndex, playTone, progress]);
 
   useEffect(() => {
     if (phase !== "playing") return;
@@ -301,6 +300,21 @@ export default function Home() {
       window.setTimeout(resumeGame, 0);
     }
   }, [resumeGame]);
+
+  const cancelParentHold = useCallback(() => {
+    if (parentHoldTimer.current) clearTimeout(parentHoldTimer.current);
+    parentHoldTimer.current = null;
+  }, []);
+
+  const startParentHold = useCallback(() => {
+    if (phase !== "lobby") return;
+    cancelParentHold();
+    parentHoldTimer.current = setTimeout(() => {
+      setSettingsOpen(false);
+      setParentReportOpen(true);
+      parentHoldTimer.current = null;
+    }, 2000);
+  }, [cancelParentHold, phase]);
 
   const returnToLobby = useCallback(() => {
     if (finishTimer.current) clearTimeout(finishTimer.current);
@@ -463,10 +477,23 @@ export default function Home() {
 
   const chooseLevel = (index: number) => {
     if (index >= progress.unlocked || phase !== "lobby") return;
+    setReviewMode(false);
     setLevelIndex(index);
   };
 
+  const startReview = (index: number) => {
+    if (index >= progress.unlocked || phase !== "lobby") return;
+    setLevelIndex(index);
+    setReviewMode(true);
+    window.setTimeout(beginSession, 0);
+  };
+
   const playNext = () => {
+    if (reviewMode) {
+      setReviewMode(false);
+      returnToLobby();
+      return;
+    }
     const next = Math.min(GARDEN_LEVELS.length - 1, levelIndex + 1);
     if (result?.won && next !== levelIndex) setLevelIndex(next);
     setPhase("lobby");
@@ -521,6 +548,22 @@ export default function Home() {
           <label><span>柔和动画<small>减少镜头与粒子运动</small></span><input type="checkbox" checked={reducedMotion} onChange={(event) => setReducedMotion(event.target.checked)} /></label>
           <label><span>轻松启蒙<small>第一关不倒计时，先学会再提速</small></span><input type="checkbox" checked={beginnerMode} onChange={(event) => setBeginnerMode(event.target.checked)} /></label>
           <label><span>大字模式<small>放大提示和学习信息</small></span><input type="checkbox" checked={largeText} onChange={(event) => setLargeText(event.target.checked)} /></label>
+          <button
+            type="button"
+            className="parent-access"
+            disabled={phase !== "lobby"}
+            onPointerDown={startParentHold}
+            onPointerUp={cancelParentHold}
+            onPointerCancel={cancelParentHold}
+            onPointerLeave={cancelParentHold}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                setSettingsOpen(false);
+                setParentReportOpen(true);
+              }
+            }}
+          ><span>家长学习报告<small>{phase === "lobby" ? "按住 2 秒进入，避免孩子误触" : "返回花园后可查看"}</small></span><b>按住查看</b></button>
         </section>
       )}
 
@@ -540,7 +583,7 @@ export default function Home() {
             <div className="promise-row"><span>✦ 12 个剧情关卡</span><span>✦ 4 种任务机制</span><span>✦ 本机保存进度</span></div>
           </div>
 
-          <AdventureHub progress={progress} levelIndex={levelIndex} onChooseLevel={chooseLevel} onStart={requestStart} onClaimDaily={claimDaily} onCosmetic={chooseCosmetic} />
+          <AdventureHub progress={progress} levelIndex={levelIndex} onChooseLevel={chooseLevel} onStart={requestStart} onStartReview={startReview} onClaimDaily={claimDaily} onCosmetic={chooseCosmetic} />
         </section>
       )}
       {phase === "lobby" && toast && <div className="hub-toast" aria-live="polite">{toast}</div>}
@@ -570,7 +613,7 @@ export default function Home() {
           </div>
 
           <div className="spell-console">
-            <span className="spell-label"><i /> {missionName}</span>
+            <span className="spell-label"><i /> {reviewMode ? "露米弱键复习" : missionName}</span>
             <div className="spell-word" aria-live="polite" aria-label={`目标单词 ${word}`}>
                   {word.split("").map((letter, index) => <span key={`${completedWords}-${index}`} className={index < typed.length ? "done" : index === typed.length ? "current" : ""}>{letter === " " ? "·" : letter}</span>)}
             </div>
@@ -648,6 +691,8 @@ export default function Home() {
           </div>
         </section>
       )}
+
+      {parentReportOpen && <ParentReport progress={progress} onClose={() => setParentReportOpen(false)} />}
     </main>
   );
 }
