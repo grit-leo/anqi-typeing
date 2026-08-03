@@ -29,6 +29,13 @@ const PALETTES = [
   { sky: 0x073449, zenith: 0x031d35, horizon: 0x307b79, fog: 0x2b6670, ground: 0x244f55, bloom: 0x67e5ce, glow: 0xffda88, magic: 0xff92c8 },
 ] as const;
 
+const WORLD_BACKGROUNDS = [
+  "/worlds/blossom-real-v1.webp",
+  "/worlds/moonlake-real-v1.webp",
+  "/worlds/cloud-real-v1.webp",
+  "/worlds/aurora-real-v1.webp",
+] as const;
+
 function seeded(seedStart: number) {
   let seed = seedStart;
   return () => {
@@ -182,11 +189,64 @@ export function MagicGarden3D(props: MagicGarden3DProps) {
     scene.fog = new THREE.FogExp2(initialPalette.fog, 0.026);
     const camera = new THREE.PerspectiveCamera(43, 1, 0.1, 90);
     camera.position.set(0, 3.2, 11.7);
+    scene.add(camera);
+
+    const textureLoader = new THREE.TextureLoader();
+    const backdropTextures = new Map<number, THREE.Texture>();
+    const loadingBackdrops = new Set<number>();
+    let sceneDisposed = false;
+    // Keep the photographic plate in the opaque render pass. A transparent
+    // sprite is sorted after opaque meshes and can cover the heroine even with
+    // a lower renderOrder.
+    const realBackdropMaterial = new THREE.SpriteMaterial({ transparent: false, depthTest: false, depthWrite: false, fog: false, toneMapped: false });
+    const realBackdrop = new THREE.Sprite(realBackdropMaterial);
+    realBackdrop.name = "realisticWorldBackdrop";
+    realBackdrop.position.set(0, 0, -60);
+    realBackdrop.renderOrder = -100;
+    realBackdrop.visible = false;
+    camera.add(realBackdrop);
+    let activeBackdropWorld = -1;
+
+    const loadBackdrop = (worldIndex: number) => {
+      const cached = backdropTextures.get(worldIndex);
+      if (cached) {
+        realBackdropMaterial.map = cached;
+        realBackdropMaterial.needsUpdate = true;
+        activeBackdropWorld = worldIndex;
+        return;
+      }
+      if (loadingBackdrops.has(worldIndex)) return;
+      loadingBackdrops.add(worldIndex);
+      textureLoader.load(
+        WORLD_BACKGROUNDS[worldIndex] ?? WORLD_BACKGROUNDS[0],
+        (texture) => {
+          if (sceneDisposed) {
+            texture.dispose();
+            return;
+          }
+          texture.colorSpace = THREE.SRGBColorSpace;
+          texture.minFilter = THREE.LinearMipmapLinearFilter;
+          texture.magFilter = THREE.LinearFilter;
+          backdropTextures.set(worldIndex, texture);
+          loadingBackdrops.delete(worldIndex);
+          if (liveRef.current.worldIndex === worldIndex) {
+            realBackdropMaterial.map = texture;
+            realBackdropMaterial.needsUpdate = true;
+            realBackdrop.visible = true;
+            activeBackdropWorld = worldIndex;
+          }
+        },
+        undefined,
+        () => loadingBackdrops.delete(worldIndex),
+      );
+    };
+    loadBackdrop(liveRef.current.worldIndex);
 
     const skyUniforms = {
       zenithColor: { value: new THREE.Color(initialPalette.zenith) },
       skyColor: { value: new THREE.Color(initialPalette.sky) },
       horizonColor: { value: new THREE.Color(initialPalette.horizon) },
+      opacity: { value: 1 },
     };
     const skyDome = new THREE.Mesh(
       new THREE.SphereGeometry(58, lightweight ? 20 : 32, lightweight ? 12 : 20),
@@ -194,19 +254,21 @@ export function MagicGarden3D(props: MagicGarden3DProps) {
         uniforms: skyUniforms,
         side: THREE.BackSide,
         depthWrite: false,
+        transparent: true,
         fog: false,
         vertexShader: `varying float vHeight; void main(){ vHeight = normalize(position).y; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
         fragmentShader: `
           uniform vec3 zenithColor;
           uniform vec3 skyColor;
           uniform vec3 horizonColor;
+          uniform float opacity;
           varying float vHeight;
           void main(){
             float upper = smoothstep(-0.05, 0.75, vHeight);
             float horizon = 1.0 - smoothstep(-0.16, 0.18, abs(vHeight));
             vec3 color = mix(skyColor, zenithColor, upper);
             color = mix(color, horizonColor, horizon * 0.78);
-            gl_FragColor = vec4(color, 1.0);
+            gl_FragColor = vec4(color, opacity);
           }
         `,
       }),
@@ -655,13 +717,13 @@ export function MagicGarden3D(props: MagicGarden3DProps) {
     });
 
     const wisp = new THREE.Group();
-    wisp.position.set(1.15, 1.7, 1.2);
-    wisp.scale.setScalar(0.82);
+    wisp.position.set(1.25, 1.78, 1.2);
+    wisp.scale.setScalar(0.54);
     scene.add(wisp);
-    const wispMaterial = new THREE.MeshStandardMaterial({ color: initialPalette.bloom, emissive: initialPalette.bloom, emissiveIntensity: 1.15, roughness: 0.25, transparent: true, opacity: 0.94 });
+    const wispMaterial = new THREE.MeshPhysicalMaterial({ color: initialPalette.bloom, emissive: initialPalette.bloom, emissiveIntensity: 0.82, roughness: 0.18, clearcoat: 1, clearcoatRoughness: 0.16, transparent: true, opacity: 0.86 });
     const guardianColor = new THREE.Color(0x8a3f88);
     const guardianEmissive = new THREE.Color(0xff477e);
-    const wispCore = new THREE.Mesh(new THREE.IcosahedronGeometry(0.52, 2), wispMaterial);
+    const wispCore = new THREE.Mesh(new THREE.SphereGeometry(0.46, 32, 24), wispMaterial);
     wisp.add(wispCore);
     const halo = new THREE.Mesh(new THREE.TorusGeometry(0.8, 0.025, 8, 72), new THREE.MeshBasicMaterial({ color: initialPalette.magic, transparent: true, opacity: 0.72 }));
     halo.rotation.x = Math.PI / 2;
@@ -831,6 +893,15 @@ export function MagicGarden3D(props: MagicGarden3DProps) {
       renderer.setSize(width, height, false);
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
+      const backdropDistance = Math.abs(realBackdrop.position.z);
+      const visibleHeight = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * backdropDistance;
+      const visibleWidth = visibleHeight * camera.aspect;
+      const imageAspect = 1672 / 941;
+      if (visibleWidth / visibleHeight > imageAspect) {
+        realBackdrop.scale.set(visibleWidth * 1.02, (visibleWidth / imageAspect) * 1.02, 1);
+      } else {
+        realBackdrop.scale.set(visibleHeight * imageAspect * 1.02, visibleHeight * 1.02, 1);
+      }
     };
     resize();
     const resizeObserver = new ResizeObserver(resize);
@@ -867,6 +938,11 @@ export function MagicGarden3D(props: MagicGarden3DProps) {
       const live = liveRef.current;
       const motionOff = live.reducedMotion || systemReducedMotion;
       const palette = paletteColors[live.worldIndex] ?? paletteColors[0];
+      if (activeBackdropWorld !== live.worldIndex) loadBackdrop(live.worldIndex);
+      const backdropReady = backdropTextures.has(live.worldIndex) && activeBackdropWorld === live.worldIndex;
+      realBackdrop.visible = backdropReady;
+      skyUniforms.opacity.value = THREE.MathUtils.lerp(skyUniforms.opacity.value, backdropReady ? 0 : 1, 0.055);
+      const realisticScene = backdropReady;
 
       (scene.background as THREE.Color).lerp(palette.sky, 0.025);
       const fog = scene.fog as THREE.FogExp2;
@@ -876,7 +952,7 @@ export function MagicGarden3D(props: MagicGarden3DProps) {
       skyUniforms.skyColor.value.lerp(palette.sky, 0.025);
       skyUniforms.horizonColor.value.lerp(live.mission === "guardian" ? guardianEmissive : palette.horizon, 0.025);
       horizonGlowMaterial.color.lerp(live.mission === "guardian" ? guardianEmissive : palette.horizon, 0.035);
-      horizonGlowMaterial.opacity = THREE.MathUtils.lerp(horizonGlowMaterial.opacity, 0.38 + Math.min(0.22, live.combo * 0.008) + pulse * 0.18, 0.05);
+      horizonGlowMaterial.opacity = THREE.MathUtils.lerp(horizonGlowMaterial.opacity, (realisticScene ? 0.12 : 0.38) + Math.min(0.18, live.combo * 0.006) + pulse * 0.14, 0.05);
       mountainMaterial.color.lerp(palette.ground, 0.025);
       mountainGlowMaterial.color.lerp(palette.horizon, 0.025);
       mistMaterial.color.lerp(palette.fog, 0.025);
@@ -891,17 +967,20 @@ export function MagicGarden3D(props: MagicGarden3DProps) {
       burstMaterial.color.lerp(palette.glow, 0.05);
       cosmeticTarget.set(live.cosmeticColor);
       dressMaterial.color.lerp(cosmeticTarget, 0.05);
-      blossomWorld.visible = live.worldIndex === 0;
-      moonLakeWorld.visible = live.worldIndex === 1;
-      tree.visible = live.worldIndex === 0;
-      pond.visible = live.worldIndex === 0;
-      pondRing.visible = live.worldIndex === 0;
-      crystalWorld.visible = live.worldIndex === 1 || live.worldIndex === 3;
-      cloudWorld.visible = live.worldIndex === 2;
-      auroraWorld.visible = live.worldIndex === 3;
-      farBackdrop.visible = live.worldIndex !== 2;
-      moon.visible = live.worldIndex <= 1;
+      island.visible = !realisticScene;
+      lawn.visible = !realisticScene;
+      blossomWorld.visible = !realisticScene && live.worldIndex === 0;
+      moonLakeWorld.visible = !realisticScene && live.worldIndex === 1;
+      tree.visible = !realisticScene && live.worldIndex === 0;
+      pond.visible = !realisticScene && live.worldIndex === 0;
+      pondRing.visible = !realisticScene && live.worldIndex === 0;
+      crystalWorld.visible = !realisticScene && (live.worldIndex === 1 || live.worldIndex === 3);
+      cloudWorld.visible = !realisticScene && live.worldIndex === 2;
+      auroraWorld.visible = !realisticScene && live.worldIndex === 3;
+      farBackdrop.visible = !realisticScene && live.worldIndex !== 2;
+      moon.visible = !realisticScene && live.worldIndex <= 1;
       moonHalo.visible = moon.visible;
+      backgroundWisps.forEach((mote) => { mote.visible = !realisticScene; });
       fireflies.visible = live.mission === "firefly";
       rhythmRings.visible = live.mission === "rhythm";
       rhythmSkyRings.visible = live.mission === "rhythm";
@@ -1020,6 +1099,8 @@ export function MagicGarden3D(props: MagicGarden3DProps) {
       }
 
       pointerCurrent.lerp(pointerTarget, motionOff ? 0 : 0.035);
+      realBackdrop.position.x = THREE.MathUtils.lerp(realBackdrop.position.x, motionOff ? 0 : -pointerCurrent.x * 0.42, 0.045);
+      realBackdrop.position.y = THREE.MathUtils.lerp(realBackdrop.position.y, motionOff ? 0 : pointerCurrent.y * 0.2, 0.045);
       const jitterX = shake > 0 ? (random() - 0.5) * shake : 0;
       const jitterY = shake > 0 ? (random() - 0.5) * shake : 0;
       shake = Math.max(0, shake - delta * 1.5);
@@ -1042,6 +1123,7 @@ export function MagicGarden3D(props: MagicGarden3DProps) {
     renderer.domElement.addEventListener("webglcontextlost", onContextLost);
 
     return () => {
+      sceneDisposed = true;
       window.cancelAnimationFrame(frame);
       resizeObserver.disconnect();
       intersectionObserver.disconnect();
@@ -1049,6 +1131,9 @@ export function MagicGarden3D(props: MagicGarden3DProps) {
       mount.removeEventListener("pointerleave", onPointerLeave);
       renderer.domElement.removeEventListener("webglcontextlost", onContextLost);
       disposeScene(scene);
+      backdropTextures.forEach((texture) => {
+        if (texture !== realBackdropMaterial.map) texture.dispose();
+      });
       labelTexture.dispose();
       renderer.dispose();
       renderer.domElement.remove();
@@ -1056,7 +1141,7 @@ export function MagicGarden3D(props: MagicGarden3DProps) {
   }, [fallback]);
 
   return (
-    <div className={`garden-stage ${fallback ? "garden-stage-fallback" : ""}`} aria-hidden="true">
+    <div className={`garden-stage world-scene-${props.worldIndex} ${fallback ? "garden-stage-fallback" : ""}`} aria-hidden="true">
       <div ref={mountRef} className="garden-mount" />
       {fallback && <><div className="fallback-moon" /><div className="fallback-hills"><i /><i /><i /></div><div className="fallback-garden">✦　❀　✧　❀　✦</div></>}
     </div>

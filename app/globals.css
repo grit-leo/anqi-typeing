@@ -22,6 +22,10 @@ button:focus-visible,input:focus-visible { outline:3px solid var(--gold);outline
 .magic-game { position:relative;width:100vw;height:100vh;height:100dvh;min-width:320px;min-height:540px;overflow:hidden;background:#21194f;isolation:isolate; }
 .garden-stage,.garden-mount,.garden-canvas { position:absolute;inset:0;width:100%;height:100%; }
 .garden-stage { z-index:-3;overflow:hidden;background:radial-gradient(circle at 30% 25%,#5e468e,#21194f 52%,#13122f); }
+.garden-stage.world-scene-0{background:linear-gradient(rgba(18,13,45,.15),rgba(13,10,34,.24)),url('/worlds/blossom-real-v1.webp') center/cover no-repeat}
+.garden-stage.world-scene-1{background:linear-gradient(rgba(12,17,49,.12),rgba(8,14,38,.26)),url('/worlds/moonlake-real-v1.webp') center/cover no-repeat}
+.garden-stage.world-scene-2{background:linear-gradient(rgba(28,45,59,.04),rgba(14,26,44,.18)),url('/worlds/cloud-real-v1.webp') center/cover no-repeat}
+.garden-stage.world-scene-3{background:linear-gradient(rgba(5,24,38,.1),rgba(4,15,30,.25)),url('/worlds/aurora-real-v1.webp') center/cover no-repeat}
 .garden-stage::before,.garden-stage::after{content:"";position:absolute;inset:0;z-index:2;pointer-events:none}
 .garden-stage::before{background:radial-gradient(ellipse at 50% 55%,rgba(255,191,225,.12),transparent 38%),linear-gradient(90deg,rgba(255,183,217,.06),transparent 23% 77%,rgba(112,234,214,.05));mix-blend-mode:screen}
 .garden-stage::after{inset:auto -8% 0;height:25%;background:linear-gradient(180deg,transparent,rgba(17,17,54,.18) 54%,rgba(9,8,31,.48));filter:blur(10px)}

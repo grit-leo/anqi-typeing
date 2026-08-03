@@ -115,6 +115,13 @@ test("includes real WebGL, large-game systems, touch input, safety and persisten
   assert.match(stage, /rhythmRings/);
   assert.match(stage, /guardianCrown/);
   assert.match(stage, /skyDome/);
+  assert.match(stage, /WORLD_BACKGROUNDS/);
+  assert.match(stage, /realisticWorldBackdrop/);
+  assert.match(stage, /new THREE\.TextureLoader/);
+  assert.match(stage, /blossom-real-v1\.webp/);
+  assert.match(stage, /moonlake-real-v1\.webp/);
+  assert.match(stage, /cloud-real-v1\.webp/);
+  assert.match(stage, /aurora-real-v1\.webp/);
   assert.match(stage, /farBackdrop/);
   assert.match(stage, /blossomWorld/);
   assert.match(stage, /moonLakeWorld/);
@@ -149,6 +156,7 @@ test("includes real WebGL, large-game systems, touch input, safety and persisten
   assert.match(css, /@media \(max-width:800px\)/);
   assert.match(css, /@media \(prefers-reduced-motion:reduce\)/);
   assert.match(css, /og-v5\.jpg/);
+  assert.match(css, /\.garden-stage\.world-scene-0/);
   assert.match(layout, /og-v5\.jpg/);
   assert.match(layout, /summary_large_image/);
   assert.match(layout, /lang="zh-CN"/);
