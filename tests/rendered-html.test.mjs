@@ -114,6 +114,15 @@ test("includes real WebGL, large-game systems, touch input, safety and persisten
   assert.match(stage, /garden-stage-fallback/);
   assert.match(stage, /rhythmRings/);
   assert.match(stage, /guardianCrown/);
+  assert.match(stage, /skyDome/);
+  assert.match(stage, /farBackdrop/);
+  assert.match(stage, /blossomWorld/);
+  assert.match(stage, /moonLakeWorld/);
+  assert.match(stage, /skyPalace/);
+  assert.match(stage, /auroraTemple/);
+  assert.match(stage, /atmosphereMotes/);
+  assert.match(stage, /guardianStorm/);
+  assert.match(stage, /wordSprite\.visible = false/);
   assert.match(stage, /lightweight/);
   assert.doesNotMatch(stage, /THREE\.Clock|PCFSoftShadowMap/);
   assert.match(engine, /targetWords/);
