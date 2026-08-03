@@ -1,6 +1,7 @@
 "use client";
 
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import {
   applyGardenResult,
   buyOrEquipCosmetic,
@@ -531,7 +532,7 @@ export default function Home() {
   };
 
   return (
-    <main className={`magic-game phase-${phase} level-${level.id} mission-${level.mission} ${flash ? `flash-${flash}` : ""} ${isFever ? "fever-mode" : ""} ${largeText ? "child-text-large" : ""} ${highContrast ? "high-contrast" : ""}`}>
+    <main className={`magic-game phase-${phase} level-${level.id} mission-${level.mission} ${flash ? `flash-${flash}` : ""} ${combo >= 10 ? "combo-bright" : combo >= 5 ? "combo-awake" : ""} ${isFever ? "fever-mode" : ""} ${largeText ? "child-text-large" : ""} ${highContrast ? "high-contrast" : ""}`}>
       {phase === "lobby" ? <div className="garden-stage lobby-scene-fallback" aria-hidden="true" /> : (
         <Suspense fallback={<div className="garden-stage garden-loading" aria-hidden="true"><span>✦</span></div>}>
           <MagicGarden3D
@@ -548,6 +549,15 @@ export default function Home() {
             reducedMotion={reducedMotion}
           />
         </Suspense>
+      )}
+      {phase !== "lobby" && (
+        <div className="character-cast" aria-hidden="true">
+          <span className="anqi-character"><Image src="/characters/anqi-v2.webp" alt="" width={575} height={1100} draggable={false} priority unoptimized /></span>
+          <span className="lumi-character"><Image src="/characters/lumi-v2.webp" alt="" width={312} height={760} draggable={false} unoptimized /></span>
+          <span className="flower-character"><Image src="/characters/flower-spirit-v2.webp" alt="" width={644} height={520} draggable={false} unoptimized /></span>
+          <i className="spell-ray" />
+          <i className="world-response" />
+        </div>
       )}
       <div className="cinematic-vignette" aria-hidden="true" />
       <div className="petal petal-a" aria-hidden="true" /><div className="petal petal-b" aria-hidden="true" /><div className="petal petal-c" aria-hidden="true" />
@@ -645,6 +655,12 @@ export default function Home() {
             {level.mission === "rhythm" && <><span className="mechanic-icon beat-orb">♫</span><div><small>月光节拍</small><strong>{rhythmHits} 次完美拍点</strong><i className="beat-track" /></div><b>奖励 +{missionBonus}</b></>}
             {level.mission === "guardian" && <><span className="mechanic-icon boss-core">♛</span><div><small>守护者 · 第 {guardianState.phase}/3 阶段</small><strong>护盾 {guardianState.hpPercent}%</strong><i style={{ width: `${guardianState.hpPercent}%` }} /></div><b>蓄力 +{missionBonus}</b></>}
           </div>
+
+          {level.mission === "bloom" && (
+            <div className="garden-growth" aria-hidden="true">
+              {Array.from({ length: level.targetWords }, (_, index) => <i key={index} className={index < completedWords ? "awake" : ""} />)}
+            </div>
+          )}
 
           <div className="spell-console">
             <span className="spell-label"><i /> {reviewMode ? "露米弱键复习" : missionName}</span>

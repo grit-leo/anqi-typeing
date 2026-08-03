@@ -82,6 +82,14 @@ test("includes real WebGL, large-game systems, touch input, safety and persisten
   assert.match(page, /anqi-magic-garden-settings/);
   assert.match(page, /highContrast/);
   assert.match(page, /lazy\(\(\) => import\("\.\/MagicGarden3D"\)/);
+  assert.match(page, /character-cast/);
+  assert.match(page, /characters\/anqi-v2\.webp/);
+  assert.match(page, /characters\/lumi-v2\.webp/);
+  assert.match(page, /characters\/flower-spirit-v2\.webp/);
+  assert.match(page, /garden-growth/);
+  assert.match(css, /flash-correct \.spell-ray/);
+  assert.match(css, /flash-word \.flower-character/);
+  assert.match(css, /flash-wrong \.lumi-character/);
 
   assert.match(hub, /GARDEN_WORLDS/);
   assert.match(hub, /GARDEN_LEVELS/);
@@ -155,9 +163,9 @@ test("includes real WebGL, large-game systems, touch input, safety and persisten
   assert.match(css, /\.high-contrast \.coach-key\.target/);
   assert.match(css, /@media \(max-width:800px\)/);
   assert.match(css, /@media \(prefers-reduced-motion:reduce\)/);
-  assert.match(css, /og-v5\.jpg/);
+  assert.match(css, /characters\/anqi-v2\.webp/);
   assert.match(css, /\.garden-stage\.world-scene-0/);
-  assert.match(layout, /og-v5\.jpg/);
+  assert.match(layout, /og-v6\.jpg/);
   assert.match(layout, /summary_large_image/);
   assert.match(layout, /lang="zh-CN"/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);

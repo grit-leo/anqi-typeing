@@ -776,6 +776,13 @@ export function MagicGarden3D(props: MagicGarden3DProps) {
     wordSprite.visible = false;
     wisp.add(wordSprite);
 
+    // The final character cast is rendered as high-resolution 2.5D artwork in
+    // the UI layer. Keep these lightweight meshes only as internal animation
+    // anchors for lights and mission effects.
+    heroine.visible = false;
+    bunny.visible = false;
+    wisp.visible = false;
+
     const backgroundWisps: THREE.Group[] = [];
     [[-4.2, 2.6, -2.8], [4.7, 3.4, -4.4], [5.6, 1.4, -1.8]].forEach(([x, y, z], index) => {
       const mote = new THREE.Group();
@@ -792,6 +799,7 @@ export function MagicGarden3D(props: MagicGarden3DProps) {
     beamGeometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(6), 3));
     const beamMaterial = new THREE.LineBasicMaterial({ color: initialPalette.magic, transparent: true, opacity: 0, blending: THREE.AdditiveBlending });
     const beam = new THREE.Line(beamGeometry, beamMaterial);
+    beam.visible = false;
     scene.add(beam);
 
     const burstCount = lightweight ? 48 : 86;

@@ -12,8 +12,8 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://key-quest-cn.gitluochao.chatgpt.site"),
   title,
   description,
-  openGraph: { title, description, type: "website", images: [{ url: "/og-v5.jpg", width: 1672, height: 941, alt: "安琪打字机四界键盘冒险" }] },
-  twitter: { card: "summary_large_image", title, description, images: ["/og-v5.jpg"] },
+  openGraph: { title, description, type: "website", images: [{ url: "/og-v6.jpg", width: 1672, height: 941, alt: "安琪与月兔露米在星愿花园开启打字冒险" }] },
+  twitter: { card: "summary_large_image", title, description, images: ["/og-v6.jpg"] },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
