@@ -14,6 +14,7 @@ import {
   FIREFLY_ROUND_SECONDS,
   GARDEN_LEVELS,
   getAdaptiveLevelWord,
+  getAdaptiveTargetKeys,
   getEarnedPetals,
   getLessonAct,
   getLocalDateKey,
@@ -41,6 +42,7 @@ import {
   getExplorationEncounter,
   isEndlessBoundary,
   isExplorationBoundary,
+  type WorldDiscovery,
   type ExplorationEncounterId,
 } from "./exploration-engine";
 import type { ExplorationWorldStatus } from "./ExplorationWorld3D";
@@ -134,7 +136,8 @@ export default function Home() {
   const [reviewMode, setReviewMode] = useState(false);
   const [endlessMode, setEndlessMode] = useState(false);
   const [endlessWords, setEndlessWords] = useState(0);
-  const [worldStatus, setWorldStatus] = useState<ExplorationWorldStatus>({ distance: 0, zone: 1, biome: "樱风原野", movingByClick: false });
+  const [worldStatus, setWorldStatus] = useState<ExplorationWorldStatus>({ distance: 0, zone: 1, biome: "樱风原野", movingByClick: false, quality: "精细" });
+  const [adaptiveStats, setAdaptiveStats] = useState<SessionKeyStats>({});
   const [parentReportOpen, setParentReportOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [pausedFrom, setPausedFrom] = useState<"exploring" | "playing">("playing");
@@ -151,6 +154,9 @@ export default function Home() {
   const mobileInputRef = useRef<HTMLInputElement>(null);
   const backupInputRef = useRef<HTMLInputElement>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const ambientRef = useRef<{ noise: AudioBufferSourceNode; breeze: OscillatorNode; gain: GainNode } | null>(null);
+  const lastSpeechAtRef = useRef(0);
+  const keyShownAtRef = useRef(0);
   const sessionRef = useRef<SessionSnapshot>({ correctHits: 0, mistakes: 0, completedWords: 0, bestCombo: 0, elapsed: 0 });
   const sessionKeyStatsRef = useRef<SessionKeyStats>({});
 
@@ -162,7 +168,13 @@ export default function Home() {
   const pausedFromExploration = phase === "paused" && pausedFrom === "exploring";
   const showTypingInterface = phase === "playing" || (phase === "paused" && !pausedFromExploration);
   const activeProfile = profiles.find((profile) => profile.id === activeProfileId) ?? profiles[0] ?? DEFAULT_PROFILE;
-  const word = getAdaptiveLevelWord(level, endlessMode ? level.targetWords + endlessWords : completedWords, progress.keyMastery);
+  const wordOrdinal = endlessMode ? level.targetWords + endlessWords : completedWords;
+  const word = useMemo(
+    () => getAdaptiveLevelWord(level, wordOrdinal, progress.keyMastery, adaptiveStats),
+    [adaptiveStats, level, progress.keyMastery, wordOrdinal],
+  );
+  const adaptiveKeys = getAdaptiveTargetKeys(level, progress.keyMastery, adaptiveStats);
+  const adaptiveKeyLabel = adaptiveKeys[0] ? adaptiveKeys[0] === "space" ? "空格" : adaptiveKeys[0].toUpperCase() : null;
   const target = word[typed.length] ?? "";
   const targetLabel = target === " " ? "空格" : target === "," ? "逗号" : target === "." ? "句号" : target === "'" ? "撇号" : target.toUpperCase();
   const missionDuration = getMissionDuration(level);
@@ -174,8 +186,6 @@ export default function Home() {
   const playerLevel = getPlayerLevel(progress.xp);
   const equippedCosmetic = COSMETICS.find((item) => item.id === progress.equippedCosmetic) ?? COSMETICS[0];
   const missionName = level.mission === "guardian" ? "守护者 Boss" : level.mission === "rhythm" ? "节奏挑战" : level.mission === "firefly" ? "萤火竞速" : "精准修复";
-  const missionProgressCopy = level.mission === "guardian" ? "结界剩余" : level.mission === "rhythm" ? "旋律修复" : level.mission === "firefly" ? "萤火收集" : "花园净化";
-  const missionProgressValue = level.mission === "guardian" ? Math.max(0, level.targetWords - completedWords) : completedWords;
   const lessonAct = getLessonAct(level, completedWords);
   const lessonActCopy = lessonAct === "learn" ? "认识新键" : lessonAct === "practice" ? "组合练习" : "剧情挑战";
   const fireflyRound = level.mission === "firefly" ? Math.min(3, Math.floor(elapsed / FIREFLY_ROUND_SECONDS) + 1) : 1;
@@ -185,8 +195,6 @@ export default function Home() {
   const sessionSupport = getSessionSupport(correctHits, mistakes, wrongStreak);
   const sessionSupportText = correctHits + mistakes < 5 ? "正在热身" : sessionSupport.label;
   const trainingRank = !result ? "" : result.accuracy >= 97 && bestCombo >= 20 ? "S · 精准控制" : result.accuracy >= 90 ? "A · 稳定推进" : result.won ? "B · 成功通关" : "继续校准";
-
-  const levelLabel = useMemo(() => `${level.title}，${level.goal}`, [level]);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -240,34 +248,119 @@ export default function Home() {
     if (finishTimer.current) clearTimeout(finishTimer.current);
     if (toastTimer.current) clearTimeout(toastTimer.current);
     if (parentHoldTimer.current) clearTimeout(parentHoldTimer.current);
+    window.speechSynthesis?.cancel();
+    ambientRef.current = null;
     void audioContextRef.current?.close();
   }, []);
 
-  const playTone = useCallback((kind: "key" | "wrong" | "word" | "win") => {
+  const playTone = useCallback((kind: "key" | "wrong" | "word" | "win" | "step" | "jump" | "land" | "collect") => {
     if (!soundOn || typeof window === "undefined") return;
     try {
       const AudioCtor = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       if (!AudioCtor) return;
       const context = audioContextRef.current && audioContextRef.current.state !== "closed" ? audioContextRef.current : new AudioCtor();
       audioContextRef.current = context;
-      const notes = kind === "win" ? [523, 659, 784] : [kind === "wrong" ? 164 : kind === "word" ? 740 : 540 + Math.min(combo, 15) * 18];
+      const notes = kind === "win" ? [523, 659, 784]
+        : kind === "collect" ? [659, 880, 1047]
+          : kind === "jump" ? [330, 520]
+            : kind === "land" ? [118]
+              : kind === "step" ? [92 + (Math.floor(performance.now() / 300) % 2) * 14]
+                : [kind === "wrong" ? 164 : kind === "word" ? 740 : 540 + Math.min(combo, 15) * 18];
       notes.forEach((frequency, index) => {
         const oscillator = context.createOscillator();
         const gain = context.createGain();
-        oscillator.type = kind === "wrong" ? "triangle" : "sine";
+        oscillator.type = kind === "wrong" ? "triangle" : kind === "step" || kind === "land" ? "sine" : "sine";
         oscillator.frequency.value = frequency;
         const start = context.currentTime + index * 0.085;
-        gain.gain.setValueAtTime(kind === "key" ? 0.035 : 0.055, start);
-        gain.gain.exponentialRampToValueAtTime(0.001, start + 0.13);
+        const volume = kind === "step" ? 0.014 : kind === "land" ? 0.025 : kind === "key" ? 0.035 : 0.055;
+        const duration = kind === "step" ? 0.07 : kind === "land" ? 0.1 : 0.13;
+        gain.gain.setValueAtTime(volume, start);
+        gain.gain.exponentialRampToValueAtTime(0.001, start + duration);
         oscillator.connect(gain);
         gain.connect(context.destination);
         oscillator.start(start);
-        oscillator.stop(start + 0.14);
+        oscillator.stop(start + duration + 0.01);
       });
     } catch {
       // Sound is an enhancement, never a condition for play.
     }
   }, [combo, soundOn]);
+
+  const stopAmbient = useCallback(() => {
+    const ambient = ambientRef.current;
+    if (!ambient) return;
+    ambientRef.current = null;
+    const now = audioContextRef.current?.currentTime ?? 0;
+    ambient.gain.gain.cancelScheduledValues(now);
+    ambient.gain.gain.setTargetAtTime(0.0001, now, 0.08);
+    window.setTimeout(() => {
+      try { ambient.noise.stop(); } catch { /* already stopped */ }
+      try { ambient.breeze.stop(); } catch { /* already stopped */ }
+    }, 320);
+  }, []);
+
+  const startAmbient = useCallback(() => {
+    if (!soundOn || ambientRef.current || typeof window === "undefined") return;
+    try {
+      const AudioCtor = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      if (!AudioCtor) return;
+      const context = audioContextRef.current && audioContextRef.current.state !== "closed" ? audioContextRef.current : new AudioCtor();
+      audioContextRef.current = context;
+      void context.resume();
+      const seconds = 3;
+      const buffer = context.createBuffer(1, context.sampleRate * seconds, context.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let index = 0; index < data.length; index += 1) data[index] = (Math.random() * 2 - 1) * (0.35 + Math.sin(index / 19000) * 0.1);
+      const noise = context.createBufferSource();
+      noise.buffer = buffer;
+      noise.loop = true;
+      const filter = context.createBiquadFilter();
+      filter.type = "bandpass";
+      filter.frequency.value = 620;
+      filter.Q.value = 0.35;
+      const breeze = context.createOscillator();
+      breeze.type = "sine";
+      breeze.frequency.value = 174;
+      const breezeGain = context.createGain();
+      breezeGain.gain.value = 0.004;
+      const gain = context.createGain();
+      gain.gain.value = 0.0001;
+      gain.gain.exponentialRampToValueAtTime(0.018, context.currentTime + 1.1);
+      noise.connect(filter);
+      filter.connect(gain);
+      breeze.connect(breezeGain);
+      breezeGain.connect(gain);
+      gain.connect(context.destination);
+      noise.start();
+      breeze.start();
+      ambientRef.current = { noise, breeze, gain };
+    } catch {
+      // Quiet play remains fully supported when audio is unavailable.
+    }
+  }, [soundOn]);
+
+  const speakEncouragement = useCallback((message: string, urgent = false) => {
+    if (!soundOn || typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    const now = Date.now();
+    if (!urgent && now - lastSpeechAtRef.current < 9000) return;
+    lastSpeechAtRef.current = now;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(message);
+    utterance.lang = "zh-CN";
+    utterance.rate = 0.9;
+    utterance.pitch = 1.08;
+    utterance.volume = 0.62;
+    window.speechSynthesis.speak(utterance);
+  }, [soundOn]);
+
+  useEffect(() => {
+    if (soundOn && (phase === "exploring" || phase === "playing")) startAmbient();
+    else stopAmbient();
+  }, [phase, soundOn, startAmbient, stopAmbient]);
+
+  useEffect(() => {
+    keyShownAtRef.current = performance.now();
+  }, [phase, typed.length, word]);
 
   const showFlash = useCallback((kind: Exclude<Flash, null>) => {
     setFlash(kind);
@@ -285,7 +378,7 @@ export default function Home() {
     if (finishingRef.current) return;
     finishingRef.current = true;
     const final = snapshot ?? sessionRef.current;
-    const elapsedSeconds = Math.max(1, final.elapsed || (Date.now() - startedAt.current) / 1000);
+    const elapsedSeconds = Math.max(1, final.elapsed);
     const calculated = calculateGardenResult(level, final.correctHits, final.mistakes, elapsedSeconds, final.completedWords, final.bestCombo, missionBonusRef.current);
     const finalResult = { ...calculated, petals: getEarnedPetals(progress, level, calculated, final.completedWords) };
     setElapsed(elapsedSeconds);
@@ -325,7 +418,7 @@ export default function Home() {
   const beginSession = useCallback(() => {
     setEndlessMode(false);
     setEndlessWords(0);
-    setWorldStatus({ distance: 0, zone: 1, biome: "樱风原野", movingByClick: false });
+    setWorldStatus({ distance: 0, zone: 1, biome: "樱风原野", movingByClick: false, quality: "精细" });
     setTyped("");
     setCorrectHits(0);
     setMistakes(0);
@@ -344,6 +437,8 @@ export default function Home() {
     finishingRef.current = false;
     sessionRef.current = { correctHits: 0, mistakes: 0, completedWords: 0, bestCombo: 0, elapsed: 0 };
     sessionKeyStatsRef.current = {};
+    setAdaptiveStats({});
+    keyShownAtRef.current = performance.now();
     startedAt.current = Date.now();
     const exploreFirst = level.id === "petal-gate" && !reviewModeRef.current;
     setPausedFrom(exploreFirst ? "exploring" : "playing");
@@ -358,7 +453,7 @@ export default function Home() {
     setLevelIndex(0);
     setEndlessMode(true);
     setEndlessWords(0);
-    setWorldStatus({ distance: 0, zone: 1, biome: getEndlessBiome(0).name, movingByClick: false });
+    setWorldStatus({ distance: 0, zone: 1, biome: getEndlessBiome(0).name, movingByClick: false, quality: "精细" });
     setTyped("");
     setCorrectHits(0);
     setMistakes(0);
@@ -375,6 +470,8 @@ export default function Home() {
     finishingRef.current = false;
     sessionRef.current = { correctHits: 0, mistakes: 0, completedWords: 0, bestCombo: 0, elapsed: 0 };
     sessionKeyStatsRef.current = {};
+    setAdaptiveStats({});
+    keyShownAtRef.current = performance.now();
     startedAt.current = Date.now();
     setPausedFrom("exploring");
     setPhase("exploring");
@@ -579,15 +676,18 @@ export default function Home() {
     updateProgress((current) => buyOrEquipCosmetic(current, cosmeticId));
   }, [updateProgress]);
 
-  const recordKeyAttempt = useCallback((expected: string, correct: boolean) => {
+  const recordKeyAttempt = useCallback((expected: string, correct: boolean, reactionMs: number) => {
     const keys = /^[A-Z]$/.test(expected) ? ["shift", expected.toLowerCase()] : [expected === " " ? "space" : expected === "," ? "comma" : expected === "." ? "period" : expected === "'" ? "apostrophe" : expected.toLowerCase()];
     keys.forEach((key) => {
-      const previous = sessionKeyStatsRef.current[key] ?? { attempts: 0, correct: 0, bestStreak: 0 };
+      const previous = sessionKeyStatsRef.current[key] ?? { attempts: 0, correct: 0, bestStreak: 0, totalReactionMs: 0, slowAttempts: 0 };
       const nextCorrect = previous.correct + (correct ? 1 : 0);
+      const safeReaction = Math.max(80, Math.min(4000, reactionMs));
       sessionKeyStatsRef.current[key] = {
         attempts: previous.attempts + 1,
         correct: nextCorrect,
         bestStreak: correct ? Math.max(previous.bestStreak, combo + 1) : previous.bestStreak,
+        totalReactionMs: (previous.totalReactionMs ?? 0) + safeReaction,
+        slowAttempts: (previous.slowAttempts ?? 0) + (safeReaction > 1100 ? 1 : 0),
       };
     });
   }, [combo]);
@@ -608,15 +708,36 @@ export default function Home() {
     window.setTimeout(() => mobileInputRef.current?.focus({ preventScroll: true }), 100);
   }, [completedWords, elapsed, endlessMode, endlessWords, isExplorationPrototype, phase, showToast]);
 
+  const discoverWorldSecret = useCallback((discovery: WorldDiscovery) => {
+    const firstVisit = !progress.discoveries.includes(discovery.id);
+    if (firstVisit) {
+      updateProgress((current) => ({
+        ...current,
+        discoveries: current.discoveries.includes(discovery.id) ? current.discoveries : [...current.discoveries, discovery.id],
+        petals: current.petals + discovery.reward,
+        xp: current.xp + discovery.reward * 2,
+      }));
+      playTone("collect");
+    }
+    showToast(`${discovery.message}${firstVisit ? ` · +${discovery.reward} 花瓣` : ""}`);
+    speakEncouragement(discovery.kind === "npc" ? `${discovery.name}说：${discovery.message}` : discovery.message, true);
+  }, [playTone, progress.discoveries, showToast, speakEncouragement, updateProgress]);
+
+  const playMovementAudio = useCallback((kind: "step" | "jump" | "land") => {
+    playTone(kind);
+  }, [playTone]);
+
   const handleKey = useCallback((key: string) => {
     if (phase !== "playing" || finishingRef.current || !target || fireflyResting) return;
+    const reactionMs = performance.now() - keyShownAtRef.current;
     const outcome = evaluateTypingKey(word, typed.length, key);
     if (outcome === "correct" || outcome === "complete") {
       const nextCorrect = correctHits + 1;
       const nextCombo = combo + 1;
       const nextBest = Math.max(bestCombo, nextCombo);
       const nextTyped = typed + target;
-      recordKeyAttempt(target, true);
+      recordKeyAttempt(target, true, reactionMs);
+      keyShownAtRef.current = performance.now();
       if (level.mission === "rhythm") {
         const beat = ((Date.now() - startedAt.current) / 1000) % 1;
         if (beat <= 0.2 || beat >= 0.8) {
@@ -645,8 +766,10 @@ export default function Home() {
         if (endlessMode) setEndlessWords(nextEndlessWords);
         else setCompletedWords(nextCompleted);
         setTyped("");
+        setAdaptiveStats({ ...sessionKeyStatsRef.current });
         showFlash("word");
         playTone("word");
+        if ((endlessMode ? nextEndlessWords : nextCompleted) % 5 === 0) speakEncouragement(nextBest >= 8 ? "太棒了，手指越来越稳！" : "很好，保持准确，继续前进！");
         if (!endlessMode && nextCompleted === 5 && !isExplorationPrototype) showToast("第一阶段完成 · 指法和节奏正在稳定");
         if (!endlessMode && nextCompleted === Math.ceil(level.targetWords / 2)) showToast("旅程过半 · 月兔为你加油");
         if (!endlessMode && level.mission === "guardian" && (nextCompleted === Math.ceil(level.targetWords / 3) || nextCompleted === Math.ceil(level.targetWords * 2 / 3))) showToast("护盾破裂 · Boss 进入下一阶段");
@@ -689,6 +812,7 @@ export default function Home() {
             };
           });
           sessionKeyStatsRef.current = {};
+          setAdaptiveStats({});
           finishingRef.current = true;
           finishTimer.current = setTimeout(() => {
             finishingRef.current = false;
@@ -701,19 +825,23 @@ export default function Home() {
         setTyped(nextTyped);
       }
     } else if (outcome === "wrong") {
-      recordKeyAttempt(target, false);
+      recordKeyAttempt(target, false, reactionMs);
+      keyShownAtRef.current = performance.now();
       setMistakes((current) => current + 1);
       setCombo(0);
       setWrongStreak((current) => {
         const next = current + 1;
         if (next === 2) showToast(`${getKeyMovement(target)}，按完立即归位`);
-        if (next >= 3) showToast(`先看屏幕上的 ${targetLabel}，不要低头找键`);
+        if (next >= 3) {
+          showToast(`先看屏幕上的 ${targetLabel}，不要低头找键`);
+          speakEncouragement(`没关系，先找到 ${targetLabel}，慢慢按。`, true);
+        }
         return next;
       });
       playTone("wrong");
       showFlash("wrong");
     }
-  }, [addMissionBonus, bestCombo, combo, completedWords, correctHits, endlessMode, endlessWords, finishGame, fireflyResting, fireflyRound, isExplorationPrototype, level.mission, level.targetWords, mistakes, phase, playTone, recordKeyAttempt, reducedMotion, rhythmHits, showFlash, showToast, target, targetLabel, typed, updateProgress, word, worldStatus.distance]);
+  }, [addMissionBonus, bestCombo, combo, completedWords, correctHits, endlessMode, endlessWords, finishGame, fireflyResting, fireflyRound, isExplorationPrototype, level.mission, level.targetWords, mistakes, phase, playTone, recordKeyAttempt, reducedMotion, rhythmHits, showFlash, showToast, speakEncouragement, target, targetLabel, typed, updateProgress, word, worldStatus.distance]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -811,7 +939,10 @@ export default function Home() {
               reducedMotion={reducedMotion}
               cosmeticColor={equippedCosmetic.color}
               feedback={flash}
+              discoveredIds={progress.discoveries}
               onEncounter={beginExplorationEncounter}
+              onDiscover={discoverWorldSecret}
+              onMovementAudio={playMovementAudio}
               onCheckpoint={showToast}
               onWorldStatus={setWorldStatus}
             />
@@ -881,7 +1012,7 @@ export default function Home() {
       {settingsOpen && (
         <section className="settings-popover" aria-label="游戏设置">
           <div><strong>儿童辅助设置</strong><button onClick={closeSettings} aria-label="关闭设置">×</button></div>
-          <label><span>魔法音效<small>按键、连击和过关提示</small></span><input type="checkbox" checked={soundOn} onChange={(event) => setSoundOn(event.target.checked)} /></label>
+          <label><span>沉浸声音与鼓励<small>环境声、脚步、按键和中文语音鼓励</small></span><input type="checkbox" checked={soundOn} onChange={(event) => setSoundOn(event.target.checked)} /></label>
           <label><span>柔和动画<small>减少镜头与粒子运动</small></span><input type="checkbox" checked={reducedMotion} onChange={(event) => setReducedMotion(event.target.checked)} /></label>
           <label><span>指法优先模式<small>第一关不限时，准确掌握后再提速</small></span><input type="checkbox" checked={beginnerMode} onChange={(event) => setBeginnerMode(event.target.checked)} /></label>
           <label><span>大字模式<small>放大提示和学习信息</small></span><input type="checkbox" checked={largeText} onChange={(event) => setLargeText(event.target.checked)} /></label>
@@ -929,52 +1060,21 @@ export default function Home() {
 
       {isExplorationPrototype && phase === "exploring" && explorationEncounter && (
         <section className="exploration-interface" aria-label="樱花谷探索任务">
-          <div className="explore-objective-card">
+          <div className="explore-focus-card">
             <span className="objective-icon">{explorationEncounter.icon}</span>
-            <div><small>{endlessMode ? `无限世界 · 第 ${worldStatus.zone} 区` : `当前目标 · 第 ${explorationEncounter.number}/3 站`}</small><strong>{explorationEncounter.title}</strong><p>{endlessMode ? `${worldStatus.biome} · 点击路面自动前往` : explorationEncounter.subtitle}</p></div>
+            <div><small>现在只做这件事 · {endlessMode ? `第 ${worldStatus.zone} 区` : `主线 ${explorationEncounter.number}/3`}</small><strong>{explorationEncounter.title}</strong><p>{endlessMode ? `${worldStatus.biome} · ${worldStatus.movingByClick ? "正在自动前往" : "点击远处路面出发"}` : explorationEncounter.subtitle}</p></div>
+            <div className="focus-world-meta">
+              <span>{endlessMode ? `${worldStatus.distance}m · ${explorationStations} 次奇遇` : `发现 ${progress.discoveries.length}/4 · 机关 ${explorationStations}/3`}</span>
+              <i>{worldStatus.quality}画质</i>
+            </div>
+            <button onClick={pauseGame} aria-label="暂停探索">Ⅱ</button>
           </div>
-          {endlessMode ? (
-            <div className="endless-world-status" aria-label={`无限世界第 ${worldStatus.zone} 区，探索 ${worldStatus.distance} 米`}>
-              <span><small>当前生态</small><strong>{worldStatus.biome}</strong></span>
-              <span><small>探索距离</small><strong>{worldStatus.distance}<i>m</i></strong></span>
-              <span><small>完成奇遇</small><strong>{explorationStations}<i>次</i></strong></span>
-              <em className={worldStatus.movingByClick ? "walking" : ""}>{worldStatus.movingByClick ? "自动前往中…" : "点击地面前往"}</em>
-            </div>
-          ) : (
-            <div className="explore-route-progress" aria-label={`已完成 ${explorationStations} 个探索机关`}>
-              {[0, 1, 2].map((station) => <span key={station} className={station < explorationStations ? "complete" : station === explorationStations ? "current" : ""}><i>{station < explorationStations ? "✓" : station + 1}</i><small>{station === 0 ? "花瓣门" : station === 1 ? "浮桥" : "花塔"}</small></span>)}
-            </div>
-          )}
-          <div className="explore-session-card"><span><small>探索用时</small><strong>{Math.floor(elapsed / 60).toString().padStart(2, "0")}:{Math.floor(elapsed % 60).toString().padStart(2, "0")}</strong></span><button onClick={pauseGame} aria-label="暂停探索">Ⅱ</button></div>
-          {endlessMode && <div className="endless-minimap" aria-label={`前方奇遇还有 ${Math.max(0, Math.round(-explorationEncounter.position.z - 24 - worldStatus.distance))} 米`}><div><i /><i /><i /><span className="map-player">安</span><span className="map-event">{explorationEncounter.icon}</span></div><small>前方奇遇 <b>{Math.max(0, Math.round(-explorationEncounter.position.z - 24 - worldStatus.distance))}m</b></small></div>}
           {toast && <div className="game-toast exploration-toast" aria-live="polite">{toast}</div>}
         </section>
       )}
 
       {showTypingInterface && (
         <section className={`play-interface ${isExplorationPrototype ? "exploration-encounter-interface" : ""}`} aria-label={isExplorationPrototype ? "探索机关打字解谜" : "花园打字游戏"}>
-          <div className="quest-hud">
-            <div className="quest-copy"><span>{isExplorationPrototype ? explorationEncounter?.subtitle ?? "星愿花塔" : missionProgressCopy}</span><strong>{isExplorationPrototype ? explorationProgress.current : missionProgressValue}<i>/{isExplorationPrototype ? explorationProgress.total : level.targetWords}</i></strong></div>
-            <div className="quest-track" aria-label={isExplorationPrototype ? `${explorationEncounter?.title ?? "最终机关"}，完成 ${explorationProgress.percent}%` : `${levelLabel}，完成 ${questProgress}%`}><i style={{ width: `${isExplorationPrototype ? explorationProgress.percent : questProgress}%` }} /><span style={{ left: `calc(${isExplorationPrototype ? explorationProgress.percent : questProgress}% - 9px)` }}>{explorationEncounter?.icon ?? "✿"}</span></div>
-            <small>{isExplorationPrototype ? endlessMode ? `无限奇遇 ${explorationEncounter?.number ?? 1} · 每完成 5 个词获得花瓣与经验` : `机关 ${explorationEncounter?.number ?? 3}/3 · 看屏幕输入，完成后继续探索` : `${lessonActCopy} · 新键 ${level.newKeys.map((key) => key === "space" ? "空格" : key === "shift" ? "Shift" : key === "comma" ? "," : key === "period" ? "." : key === "apostrophe" ? "'" : key.toUpperCase()).join(" · ")} · 基础通关 85% · 推荐目标 90%`}</small>
-          </div>
-          <div className="session-hud">
-            <span><small>{calmSession ? "学习模式" : "剩余时间"}</small><b className={!calmSession && timeLeft !== null && timeLeft <= 10 ? "danger" : ""}>{calmSession ? "∞" : timeLeft}{!calmSession && <i>s</i>}</b></span>
-            <span><small>星愿积分</small><b>{score}</b></span>
-            <button onClick={pauseGame} aria-label="暂停游戏">Ⅱ</button>
-          </div>
-
-          {!isExplorationPrototype && <div className={`combo-ribbon ${combo >= 5 ? "active" : ""}`}>
-            <small>MAGIC COMBO</small><strong>{combo}<i>×</i></strong><span>{isFever ? "星愿时刻" : combo >= 5 ? "魔力上升" : "连续输入积蓄魔力"}</span>
-          </div>}
-
-          {!isExplorationPrototype && <div className={`mission-mechanic mechanic-${level.mission}`} aria-live="polite">
-            {level.mission === "bloom" && <><span className="mechanic-icon">❀</span><div><small>{levelMechanic.name}</small><strong>{levelMechanic.action}</strong><i style={{ width: `${questProgress}%` }} /></div><b>{completedWords}/{level.targetWords} · 稳定输入</b></>}
-            {level.mission === "firefly" && <><span className="mechanic-icon">✦</span><div><small>{levelMechanic.name} · 第 {fireflyRound}/3 轮</small><strong>{fireflyResting ? "活动手腕，准备下一轮" : levelMechanic.action}</strong><i style={{ width: `${Math.min(100, ((elapsed % FIREFLY_ROUND_SECONDS) / FIREFLY_ACTIVE_SECONDS) * 100)}%` }} /></div><b>光能 +{missionBonus}</b></>}
-            {level.mission === "rhythm" && <><span className="mechanic-icon beat-orb">♫</span><div><small>{levelMechanic.name}</small><strong>{rhythmHits} 次完美拍点</strong><i className="beat-track" /></div><b>{levelMechanic.action}</b></>}
-            {level.mission === "guardian" && <><span className="mechanic-icon boss-core">♛</span><div><small>{levelMechanic.name} · 第 {guardianState.phase}/3 阶段</small><strong>{guardianState.shieldName} {guardianState.hpPercent}%</strong><i style={{ width: `${guardianState.hpPercent}%` }} /></div><b>蓄力 +{missionBonus}</b></>}
-          </div>}
-
           {!isExplorationPrototype && <div className={`world-challenge challenge-${level.mission} challenge-world-${level.worldIndex}`} aria-hidden="true">
             {level.mission === "bloom" && <div className="garden-growth">{Array.from({ length: level.targetWords }, (_, index) => <i key={index} className={index < completedWords ? "awake" : ""} />)}</div>}
             {level.mission === "firefly" && <div className={`firefly-trail ${fireflyResting ? "resting" : ""}`}>{Array.from({ length: 8 }, (_, index) => <i key={index} className={index < Math.ceil(questProgress / 12.5) ? "awake" : ""} />)}</div>}
@@ -983,8 +1083,15 @@ export default function Home() {
           </div>}
 
           <div className={`spell-console ${isExplorationPrototype ? "encounter-console" : ""}`}>
-            <span className="spell-label"><i /> {reviewMode ? "露米弱键复习" : isExplorationPrototype ? `${explorationEncounter?.icon ?? "✦"} ${explorationEncounter?.title ?? "最终机关"}` : missionName}</span>
-            {isExplorationPrototype && <p className="encounter-story">{explorationEncounter?.story}</p>}
+            <div className="typing-focus-strip">
+              <span><small>现在只输入这个词</small><strong>{reviewMode ? "弱键复习" : isExplorationPrototype ? explorationEncounter?.title ?? "探索机关" : `${lessonActCopy} · ${missionName}`}</strong></span>
+              <em>{isExplorationPrototype ? `${explorationProgress.current}/${explorationProgress.total}` : `${completedWords}/${level.targetWords}`}</em>
+              <i>{calmSession ? "不限时" : `${timeLeft}s`}</i>
+              <b>{combo > 1 ? `${combo} 连击` : `${score} 分`}</b>
+              <button onClick={pauseGame} aria-label="暂停游戏">Ⅱ</button>
+            </div>
+            <div className="typing-total-track" aria-label={`${isExplorationPrototype ? explorationProgress.percent : questProgress}% 完成`}><i style={{ width: `${isExplorationPrototype ? explorationProgress.percent : questProgress}%` }} /></div>
+            {adaptiveKeyLabel && word.toLowerCase().includes(adaptiveKeys[0] === "space" ? " " : adaptiveKeys[0]) && <p className="adaptive-focus-note">露米正在温和巩固 <kbd>{adaptiveKeyLabel}</kbd>：这一词会重点记录准确率和反应时间</p>}
             <div className="spell-word" aria-live="polite" aria-label={`目标单词 ${word}`}>
                   {word.split("").map((letter, index) => <span key={`${completedWords}-${index}`} className={index < typed.length ? "done" : index === typed.length ? "current" : ""}>{letter === " " ? "·" : letter}</span>)}
             </div>
@@ -1046,7 +1153,7 @@ export default function Home() {
               <span><i>02</i><b>眼睛看屏幕</b><small>根据高亮键移动手指，不低头在键盘上寻找</small></span>
               <span><i>03</i><b>按完立即归位</b><small>每次伸手后回到 F、J，用准确动作形成肌肉记忆</small></span>
             </div>
-            <p>第一关没有倒计时。点击远处地面可让安琪自动前往，也可用方向键自由探索；靠近发光机关按 Enter，解谜时再把双手放回基准位。错误不会扣生命。</p>
+            <p>第一关没有倒计时。点击远处地面可让安琪自动前往，也可用方向键自由探索；主路通往打字机关，左右支路藏着收藏和花园朋友。解谜时把双手放回基准位，系统会根据错键与反应时间调整后续词语，错误不会扣生命。</p>
             <button className="modal-primary" onClick={completeTutorial}>进入樱花谷探索 <span>→</span></button>
           </div>
         </section>

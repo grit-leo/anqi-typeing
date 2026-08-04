@@ -44,7 +44,7 @@ test("server-renders the full-screen Magic Garden commercial game", async () => 
 });
 
 test("includes real WebGL, large-game systems, touch input, safety and persistence", async () => {
-  const [page, hub, keyboard, parentReport, stage, exploration, explorationEngine, engine, css, layout, packageJson] = await Promise.all([
+  const [page, hub, keyboard, parentReport, stage, exploration, explorationEngine, engine, css, layout, packageJson, bichonModel] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/AdventureHub.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/KeyboardCoach.tsx", import.meta.url), "utf8"),
@@ -56,6 +56,7 @@ test("includes real WebGL, large-game systems, touch input, safety and persisten
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
+    readFile(new URL("../public/models/anqi-bichon.glb", import.meta.url)),
   ]);
 
   assert.match(page, /window\.addEventListener\("keydown"/);
@@ -73,13 +74,15 @@ test("includes real WebGL, large-game systems, touch input, safety and persisten
   assert.match(page, /锁定基准位/);
   assert.match(page, /错误不会扣生命/);
   assert.match(page, /指法优先模式/);
-  assert.match(page, /推荐目标 90%/);
+  assert.match(page, /反应时间/);
   assert.match(page, /按完立即归位/);
   assert.match(page, /settingsResumeRef/);
   assert.match(page, /正在热身/);
   assert.match(page, /claimDailyReward/);
   assert.match(page, /buyOrEquipCosmetic/);
-  assert.match(page, /mission-mechanic/);
+  assert.match(page, /typing-focus-strip/);
+  assert.match(page, /现在只输入这个词/);
+  assert.doesNotMatch(page, /className="quest-hud"|mission-mechanic/);
   assert.match(page, /fireflyResting/);
   assert.match(page, /rhythmHits/);
   assert.match(page, /migrateGardenProgress/);
@@ -106,6 +109,10 @@ test("includes real WebGL, large-game systems, touch input, safety and persisten
   assert.match(page, /exportBackup/);
   assert.match(page, /importBackup/);
   assert.match(page, /resetCurrentProfile/);
+  assert.match(page, /SpeechSynthesisUtterance/);
+  assert.match(page, /totalReactionMs/);
+  assert.match(page, /沉浸声音与鼓励/);
+  assert.match(page, /discoverWorldSecret/);
   assert.match(css, /flash-correct \.spell-ray/);
   assert.match(css, /flash-word \.flower-character/);
   assert.match(css, /flash-wrong \.lumi-character/);
@@ -189,12 +196,19 @@ test("includes real WebGL, large-game systems, touch input, safety and persisten
   assert.match(exploration, /isStoryPositionBlocked/);
   assert.match(exploration, /atmosphereMotes/);
   assert.match(exploration, /qualityScale/);
+  assert.match(exploration, /GLTFLoader/);
+  assert.match(exploration, /anqi-bichon\.glb/);
+  assert.match(exploration, /playBichonAnimation/);
+  assert.match(exploration, /WORLD_DISCOVERIES/);
+  assert.match(exploration, /onMovementAudio/);
+  assert.match(exploration, /renderer\.shadowMap\.enabled = qualityMode/);
   assert.match(exploration, /Math\.exp\(-delta/);
   assert.match(explorationEngine, /rune-gate/);
   assert.match(explorationEngine, /moon-bridge/);
   assert.match(explorationEngine, /wish-beacon/);
   assert.match(explorationEngine, /ENDLESS_BIOMES/);
   assert.match(explorationEngine, /getEndlessEncounter/);
+  assert.match(explorationEngine, /WORLD_DISCOVERIES/);
   assert.match(engine, /targetWords/);
   assert.match(engine, /bestScores/);
   assert.match(engine, /GardenWorldId/);
@@ -206,6 +220,7 @@ test("includes real WebGL, large-game systems, touch input, safety and persisten
   assert.match(engine, /MISSION_RULES/);
   assert.match(engine, /getGuardianState/);
   assert.match(engine, /getAdaptiveLevelWord/);
+  assert.match(engine, /getAdaptiveTargetKeys/);
   assert.match(engine, /sessionHistory/);
   assert.match(engine, /bestStars/);
   assert.match(engine, /LEVEL_MECHANICS/);
@@ -233,6 +248,17 @@ test("includes real WebGL, large-game systems, touch input, safety and persisten
   assert.match(css, /Readability baseline for a nine-year-old learner/);
   assert.match(css, /\.magic-game small\{font-size:12px!important/);
   assert.match(css, /\.hub-nav\{grid-template-columns:repeat\(3,1fr\)/);
+  assert.match(css, /Focused child HUD/);
+  assert.match(css, /\.explore-focus-card/);
+  assert.match(css, /\.typing-focus-strip/);
+  assert.equal(bichonModel.subarray(0, 4).toString("utf8"), "glTF");
+  assert.ok(bichonModel.byteLength > 300_000);
+  const gltfJsonLength = bichonModel.readUInt32LE(12);
+  const gltfJson = JSON.parse(bichonModel.subarray(20, 20 + gltfJsonLength).toString("utf8").trim());
+  assert.deepEqual(gltfJson.animations.map((animation) => animation.name), ["idle", "run", "jump", "sniff", "celebrate"]);
+  assert.ok(gltfJson.nodes.some((node) => node.name === "FurTuftsBody"));
+  assert.ok(gltfJson.nodes.some((node) => node.name === "FurTuftsHead"));
+  assert.ok(gltfJson.materials.some((material) => material.name === "PearlCurlFur"));
   assert.match(layout, /og-bichon-v1\.png/);
   assert.match(layout, /summary_large_image/);
   assert.match(layout, /lang="zh-CN"/);

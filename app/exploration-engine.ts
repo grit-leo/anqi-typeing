@@ -1,4 +1,14 @@
 export type ExplorationEncounterId = "rune-gate" | "moon-bridge" | "wish-beacon" | `endless-${number}`;
+export type WorldDiscoveryId = "dew-crystal" | "cloud-seed" | "momo-guide" | "tea-gardener";
+export type WorldDiscovery = {
+  id: WorldDiscoveryId;
+  kind: "collectible" | "npc";
+  name: string;
+  label: string;
+  message: string;
+  reward: number;
+  position: { x: number; z: number };
+};
 
 export type EndlessBiomeId = "sakura-meadow" | "moon-creek" | "cloud-orchard" | "aurora-grove";
 
@@ -29,6 +39,26 @@ export type ExplorationEncounter = {
 export const EXPLORATION_TOTAL_WORDS = 15;
 export const ENDLESS_EVENT_WORDS = 5;
 export const ENDLESS_CHUNK_LENGTH = 18;
+
+export function getPerformanceQuality(averageFrameSeconds: number, currentScale: number, lightweight: boolean): { scale: number; mode: "精细" | "流畅" } {
+  const scale = averageFrameSeconds > 0.024
+    ? Math.max(0.68, currentScale - 0.12)
+    : averageFrameSeconds < 0.0175
+      ? Math.min(1, currentScale + 0.06)
+      : currentScale;
+  return { scale, mode: lightweight || scale <= 0.88 ? "流畅" : "精细" };
+}
+
+export const WORLD_DISCOVERIES: readonly WorldDiscovery[] = [
+  { id: "momo-guide", kind: "npc", name: "向导茉茉", label: "隐秘花径的守护兔", message: "左边的小路通向晨露花圃。慢慢走，发光的叶子会为你指路。", reward: 3, position: { x: -4.9, z: -3.9 } },
+  { id: "dew-crystal", kind: "collectible", name: "晨露水晶", label: "藏在西侧花圃", message: "你找到了晨露水晶！它会记录认真探索的脚步。", reward: 6, position: { x: -6.1, z: -7.1 } },
+  { id: "tea-gardener", kind: "npc", name: "园丁茶茶", label: "月桥旁的花园朋友", message: "桥的右侧有一条弯弯小径。云朵种子正在池边等一个细心的人。", reward: 3, position: { x: 5.35, z: -14.9 } },
+  { id: "cloud-seed", kind: "collectible", name: "云朵种子", label: "藏在东侧月影池", message: "云朵种子加入了收藏！完成关卡后，它会在花园里发芽。", reward: 6, position: { x: 6.05, z: -18.15 } },
+] as const;
+
+export function getWorldDiscovery(id: string): WorldDiscovery | null {
+  return WORLD_DISCOVERIES.find((discovery) => discovery.id === id) ?? null;
+}
 
 export const ENDLESS_BIOMES: readonly EndlessBiome[] = [
   { id: "sakura-meadow", name: "樱风原野", subtitle: "花瓣会指向下一个谜题", icon: "✿", sky: 0x8fc9e7, fog: 0xd1b9ce, grass: 0x62a277, accent: 0xff9fc8 },

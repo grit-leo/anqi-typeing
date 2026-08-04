@@ -40,9 +40,11 @@ export type KeyMastery = {
   correct: number;
   streak: number;
   score: number;
+  averageReactionMs?: number;
+  speedScore?: number;
 };
 
-export type SessionKeyStat = { attempts: number; correct: number; bestStreak: number };
+export type SessionKeyStat = { attempts: number; correct: number; bestStreak: number; totalReactionMs?: number; slowAttempts?: number };
 export type SessionKeyStats = Record<string, SessionKeyStat>;
 export type LessonAct = "learn" | "practice" | "adventure";
 
@@ -121,6 +123,7 @@ export type GardenProgress = {
   keyMastery: Record<string, KeyMastery>;
   sessionHistory: SessionRecord[];
   endless: { bestDistance: number; bestEvents: number };
+  discoveries: string[];
 };
 
 export type Cosmetic = {
@@ -298,6 +301,7 @@ export const DEFAULT_GARDEN_PROGRESS: GardenProgress = {
   keyMastery: {},
   sessionHistory: [],
   endless: { bestDistance: 0, bestEvents: 0 },
+  discoveries: [],
 };
 
 export function migrateGardenProgress(raw?: Partial<GardenProgress> | null): GardenProgress {
@@ -326,6 +330,7 @@ export function migrateGardenProgress(raw?: Partial<GardenProgress> | null): Gar
     keyMastery: raw.keyMastery ?? {},
     sessionHistory: (raw.sessionHistory ?? []).slice(-30),
     endless: { ...DEFAULT_GARDEN_PROGRESS.endless, ...(raw.endless ?? {}) },
+    discoveries: [...new Set(raw.discoveries ?? [])].slice(0, 40),
   };
 }
 
@@ -348,7 +353,15 @@ export function mergeKeyMastery(current: Record<string, KeyMastery>, session: Se
     const streak = Math.max(previous.streak, stat.bestStreak);
     const accuracy = correct / Math.max(1, attempts);
     const practice = Math.min(1, attempts / 8);
-    next[key] = { attempts, correct, streak, score: Math.round(accuracy * practice * 100) };
+    const sessionReactionAttempts = stat.totalReactionMs ? stat.attempts : 0;
+    const previousReactionAttempts = previous.averageReactionMs ? previous.attempts : 0;
+    const reactionAttempts = sessionReactionAttempts + previousReactionAttempts;
+    const averageReactionMs = reactionAttempts > 0
+      ? Math.round(((previous.averageReactionMs ?? 0) * previousReactionAttempts + (stat.totalReactionMs ?? 0)) / reactionAttempts)
+      : undefined;
+    const speedScore = averageReactionMs === undefined ? undefined : Math.round(Math.max(0, Math.min(100, (1300 - averageReactionMs) / 9)));
+    const fluency = speedScore === undefined ? accuracy : accuracy * 0.76 + (speedScore / 100) * 0.24;
+    next[key] = { attempts, correct, streak, score: Math.round(fluency * practice * 100), averageReactionMs, speedScore };
   });
   return next;
 }
@@ -370,10 +383,33 @@ export function getWeakKeys(mastery: Record<string, KeyMastery>, limit = 5): str
     .map(([key]) => key);
 }
 
-export function getAdaptiveLevelWord(level: GardenLevel, completedWords: number, mastery: Record<string, KeyMastery>): string {
-  const weakKeys = getWeakKeys(mastery, 8).filter((key) => level.learnedKeys.includes(key));
+export function getAdaptiveTargetKeys(level: GardenLevel, mastery: Record<string, KeyMastery>, session: SessionKeyStats = {}): string[] {
+  const keys = new Set([...Object.keys(mastery), ...Object.keys(session)]);
+  return [...keys]
+    .filter((key) => level.learnedKeys.includes(key))
+    .map((key) => {
+      const persisted = mastery[key];
+      const live = session[key];
+      const liveAccuracy = live ? live.correct / Math.max(1, live.attempts) : 1;
+      const averageReaction = live?.totalReactionMs ? live.totalReactionMs / Math.max(1, live.attempts) : persisted?.averageReactionMs ?? 0;
+      const slowRatio = live ? (live.slowAttempts ?? 0) / Math.max(1, live.attempts) : 0;
+      const urgency = (100 - (persisted?.score ?? 100)) + (1 - liveAccuracy) * 75 + slowRatio * 34 + Math.max(0, averageReaction - 900) / 18;
+      return { key, urgency, attempts: (persisted?.attempts ?? 0) + (live?.attempts ?? 0) };
+    })
+    .filter((entry) => entry.urgency >= 16 && entry.attempts > 0)
+    .sort((left, right) => right.urgency - left.urgency || right.attempts - left.attempts)
+    .map((entry) => entry.key);
+}
+
+export function getAdaptiveLevelWord(level: GardenLevel, completedWords: number, mastery: Record<string, KeyMastery>, session: SessionKeyStats = {}): string {
+  const weakKeys = getAdaptiveTargetKeys(level, mastery, session);
   const adaptiveSlot = completedWords % 10;
-  const criticalWeakKey = weakKeys.find((key) => (mastery[key]?.score ?? 100) < 60);
+  const criticalWeakKey = weakKeys.find((key) => {
+    const live = session[key];
+    const liveAccuracy = live ? live.correct / Math.max(1, live.attempts) : 1;
+    const slowRatio = live ? (live.slowAttempts ?? 0) / Math.max(1, live.attempts) : 0;
+    return (mastery[key]?.score ?? 100) < 60 || liveAccuracy < 0.7 || slowRatio >= 0.5;
+  });
   const adaptiveSlots = criticalWeakKey ? [2, 5, 8] : [3, 8];
   if (weakKeys.length && adaptiveSlots.includes(adaptiveSlot)) {
     const weakKey = weakKeys[Math.floor(completedWords / 5) % weakKeys.length];

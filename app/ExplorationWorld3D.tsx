@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import {
   ENDLESS_BIOMES,
   ENDLESS_CHUNK_LENGTH,
@@ -11,7 +12,12 @@ import {
   getEndlessEncounter,
   getExplorationCheckpoint,
   getExplorationEncounter,
+  getPerformanceQuality,
+  getWorldDiscovery,
+  WORLD_DISCOVERIES,
   type ExplorationEncounterId,
+  type WorldDiscovery,
+  type WorldDiscoveryId,
 } from "./exploration-engine";
 
 type ExplorationMode = "explore" | "encounter" | "paused" | "complete";
@@ -25,12 +31,15 @@ type ExplorationWorld3DProps = {
   reducedMotion: boolean;
   cosmeticColor: string;
   feedback: TypingFeedback;
+  discoveredIds: string[];
   onEncounter: (id: ExplorationEncounterId) => void;
+  onDiscover: (discovery: WorldDiscovery) => void;
+  onMovementAudio: (kind: "step" | "jump" | "land") => void;
   onCheckpoint: (message: string) => void;
   onWorldStatus: (status: ExplorationWorldStatus) => void;
 };
 
-export type ExplorationWorldStatus = { distance: number; zone: number; biome: string; movingByClick: boolean };
+export type ExplorationWorldStatus = { distance: number; zone: number; biome: string; movingByClick: boolean; quality: "精细" | "流畅" };
 
 type LiveState = ExplorationWorld3DProps;
 type MoveKey = "forward" | "back" | "left" | "right" | "jump";
@@ -409,6 +418,69 @@ function makeCompanion() {
   return lumi;
 }
 
+function makeDiscoveryObject(discovery: WorldDiscovery) {
+  const group = new THREE.Group();
+  group.name = `Discovery-${discovery.id}`;
+  group.userData.discoveryId = discovery.id;
+  if (discovery.kind === "collectible") {
+    const glowColor = discovery.id === "dew-crystal" ? 0x99eaff : 0xffdd9b;
+    const material = new THREE.MeshPhysicalMaterial({ color: glowColor, emissive: glowColor, emissiveIntensity: 1.2, roughness: 0.24, transmission: 0.08, clearcoat: 0.8 });
+    const crystal = new THREE.Mesh(discovery.id === "dew-crystal" ? new THREE.IcosahedronGeometry(0.32, 1) : new THREE.OctahedronGeometry(0.34, 1), material);
+    crystal.position.y = 0.58;
+    crystal.castShadow = true;
+    group.add(crystal);
+    const halo = new THREE.Mesh(new THREE.TorusGeometry(0.46, 0.024, 8, 28), new THREE.MeshBasicMaterial({ color: glowColor, transparent: true, opacity: 0.66 }));
+    halo.position.y = 0.58;
+    halo.rotation.x = Math.PI / 2;
+    group.add(halo);
+    const light = new THREE.PointLight(glowColor, 1.4, 4, 2);
+    light.position.y = 0.7;
+    group.add(light);
+    group.userData.animatedPart = crystal;
+    group.userData.baseAnimatedY = crystal.position.y;
+    group.userData.halo = halo;
+  } else {
+    const rabbit = discovery.id === "momo-guide";
+    const coat = new THREE.MeshPhysicalMaterial({ color: rabbit ? 0xf7eee4 : 0xd8b8a0, roughness: 0.86, sheen: 0.45, sheenColor: new THREE.Color(0xffe8da) });
+    const dress = new THREE.MeshStandardMaterial({ color: rabbit ? 0xb38bd8 : 0x6da985, roughness: 0.72 });
+    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.25, 0.42, 7, 14), dress);
+    body.position.y = 0.59;
+    group.add(body);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.3, 20, 15), coat);
+    head.position.y = 1.12;
+    group.add(head);
+    if (rabbit) {
+      for (const x of [-0.15, 0.15]) {
+        const ear = new THREE.Mesh(new THREE.CapsuleGeometry(0.075, 0.34, 6, 12), coat);
+        ear.position.set(x, 1.52, 0);
+        ear.rotation.z = x < 0 ? 0.08 : -0.08;
+        group.add(ear);
+      }
+    } else {
+      const hat = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.38, 0.15, 14), dress);
+      hat.position.y = 1.44;
+      group.add(hat);
+      const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.48, 0.48, 0.035, 18), dress);
+      brim.position.y = 1.37;
+      group.add(brim);
+    }
+    for (const x of [-0.11, 0.11]) {
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.032, 10, 8), new THREE.MeshStandardMaterial({ color: 0x28212b, roughness: 0.6 }));
+      eye.position.set(x, 1.16, 0.275);
+      group.add(eye);
+    }
+    const marker = new THREE.Mesh(new THREE.OctahedronGeometry(0.1, 0), new THREE.MeshBasicMaterial({ color: 0xffe591 }));
+    marker.position.y = 1.92;
+    group.add(marker);
+    group.userData.animatedPart = head;
+    group.userData.baseAnimatedY = head.position.y;
+    group.userData.halo = marker;
+  }
+  group.position.set(discovery.position.x, 0, discovery.position.z);
+  enableSoftShadows(group);
+  return group;
+}
+
 export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
   const mountRef = useRef<HTMLDivElement>(null);
   const liveRef = useRef<LiveState>(props);
@@ -418,7 +490,10 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
   const previousEndlessModeRef = useRef(props.endlessMode);
   const reactionRef = useRef<{ kind: Exclude<TypingFeedback, null>; startedAt: number; duration: number } | null>(null);
   const nearbyRef = useRef<ExplorationEncounterId | null>(null);
+  const nearbyDiscoveryRef = useRef<WorldDiscoveryId | null>(null);
+  const discoveryObjectsRef = useRef<Map<WorldDiscoveryId, THREE.Group>>(new Map());
   const [nearby, setNearby] = useState<ExplorationEncounterId | null>(null);
+  const [nearbyDiscovery, setNearbyDiscovery] = useState<WorldDiscoveryId | null>(null);
   const [fallback, setFallback] = useState(false);
 
   useEffect(() => {
@@ -441,6 +516,20 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
 
   const interact = useCallback(() => {
     if (liveRef.current.mode !== "explore") return;
+    const discoveryId = nearbyDiscoveryRef.current;
+    if (discoveryId) {
+      const discovery = getWorldDiscovery(discoveryId);
+      if (discovery) {
+        liveRef.current.onDiscover(discovery);
+        if (discovery.kind === "collectible") {
+          const object = discoveryObjectsRef.current.get(discovery.id);
+          if (object) object.visible = false;
+          nearbyDiscoveryRef.current = null;
+          setNearbyDiscovery(null);
+        }
+      }
+      return;
+    }
     const id = nearbyRef.current;
     if (id) liveRef.current.onEncounter(id);
   }, []);
@@ -466,6 +555,7 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
     const pixelRatioCap = lightweight ? 1.08 : compactViewport ? 1.35 : 1.55;
     const nativePixelRatio = Math.min(window.devicePixelRatio, pixelRatioCap);
     let qualityScale = 1;
+    let qualityMode: ExplorationWorldStatus["quality"] = lightweight ? "流畅" : "精细";
     renderer.setPixelRatio(nativePixelRatio * qualityScale);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -618,6 +708,37 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
       addLantern(world, -2.7, z);
       addLantern(world, 2.7, z);
     });
+
+    // Two optional branch routes lead away from the main quest into discoverable spaces.
+    const hiddenZoneMaterial = new THREE.MeshStandardMaterial({ color: 0x78956f, map: grassTexture, bumpMap: grassTexture, bumpScale: 0.035, roughness: 1 });
+    const dewGrove = new THREE.Mesh(new THREE.CylinderGeometry(3.4, 3.7, 0.18, 28), hiddenZoneMaterial);
+    dewGrove.position.set(-6.1, -0.08, -7.1);
+    dewGrove.receiveShadow = true;
+    world.add(dewGrove);
+    walkableMeshes.push(dewGrove);
+    const moonPondBank = new THREE.Mesh(new THREE.CylinderGeometry(3.6, 3.9, 0.2, 28), hiddenZoneMaterial);
+    moonPondBank.position.set(6.05, -0.09, -18.15);
+    moonPondBank.receiveShadow = true;
+    world.add(moonPondBank);
+    walkableMeshes.push(moonPondBank);
+    const moonPond = new THREE.Mesh(new THREE.CircleGeometry(1.55, 30), new THREE.MeshPhysicalMaterial({ color: 0x84c8cf, transparent: true, opacity: 0.74, roughness: 0.08, clearcoat: 0.8 }));
+    moonPond.rotation.x = -Math.PI / 2;
+    moonPond.position.set(6.35, 0.035, -18.55);
+    world.add(moonPond);
+    for (let index = 0; index < 10; index += 1) {
+      const angle = (index / 10) * Math.PI * 2;
+      addFlower(world, -6.1 + Math.cos(angle) * 2.25, -7.1 + Math.sin(angle) * 2.1, index % 2 ? 0xb9a5e6 : 0x8fd7d0, 0.9);
+      if (index % 2 === 0) addShrub(world, 6.05 + Math.cos(angle) * 2.7, -18.15 + Math.sin(angle) * 2.45, 0.65, 0x507c67);
+    }
+
+    const discoveryObjects = new Map<WorldDiscoveryId, THREE.Group>();
+    WORLD_DISCOVERIES.forEach((discovery) => {
+      const object = makeDiscoveryObject(discovery);
+      object.visible = discovery.kind === "npc" || !liveRef.current.discoveredIds.includes(discovery.id);
+      discoveryObjects.set(discovery.id, object);
+      world.add(object);
+    });
+    discoveryObjectsRef.current = discoveryObjects;
 
     const endlessChunks: THREE.Group[] = [];
     const bouncePads: THREE.Mesh[] = [];
@@ -822,7 +943,7 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
       endlessPortal.add(orb);
     }
 
-    const avatar = makeAvatar(liveRef.current.cosmeticColor);
+    let avatar = makeAvatar(liveRef.current.cosmeticColor);
     scene.add(avatar);
     const reactionBurst = new THREE.Group();
     const reactionBurstMaterial = new THREE.MeshBasicMaterial({ color: 0xffe28c, transparent: true, opacity: 0.95, depthWrite: false });
@@ -839,6 +960,13 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
     scene.add(lumi);
     const spawn = liveRef.current.endlessMode ? { x: 0, y: 0.58, z: -26.2 } : getExplorationCheckpoint(liveRef.current.completedWords);
     avatar.position.set(spawn.x, spawn.y, spawn.z);
+    liveRef.current.onWorldStatus({
+      distance: liveRef.current.endlessMode ? Math.max(0, Math.floor(-spawn.z - 24)) : 0,
+      zone: liveRef.current.endlessMode ? Math.floor(liveRef.current.endlessWords / 5) + 1 : 0,
+      biome: liveRef.current.endlessMode ? getEndlessBiome(Math.floor(liveRef.current.endlessWords / 5)).name : "樱花谷",
+      movingByClick: false,
+      quality: qualityMode,
+    });
     let verticalVelocity = 0;
     let grounded = true;
     let lastCheckpointCount = getCompletedEncounterCount(liveRef.current.completedWords);
@@ -920,6 +1048,7 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
         zone: liveRef.current.endlessMode ? Math.floor(liveRef.current.endlessWords / 5) + 1 : 0,
         biome: liveRef.current.endlessMode ? getEndlessBiome(Math.floor(liveRef.current.endlessWords / 5)).name : "樱花谷",
         movingByClick: true,
+        quality: qualityMode,
       });
     };
     const releaseKeys = () => Object.keys(moveRef.current).forEach((key) => { moveRef.current[key as MoveKey] = false; });
@@ -945,20 +1074,79 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
     let lastStatusZone = -1;
     let lastClickStatus = false;
     let lastBounceAt = -10;
+    let stepClock = 0;
     let performanceSampleTime = 0;
     let performanceSampleFrames = 0;
+    let disposed = false;
     const cameraTarget = new THREE.Vector3();
     const desiredCamera = new THREE.Vector3();
     const padWorldPosition = new THREE.Vector3();
-    const bichonRig = avatar.userData.rig as THREE.Group;
-    const bichonBody = avatar.userData.body as THREE.Mesh;
-    const bichonHead = avatar.userData.head as THREE.Mesh;
-    const bichonLegs = avatar.userData.legs as THREE.Mesh[];
-    const bichonTail = avatar.userData.tail as THREE.Group;
-    const bichonEars = avatar.userData.ears as THREE.Mesh[];
-    const bichonEyes = avatar.userData.eyes as THREE.Mesh[];
-    const bichonBow = avatar.userData.bow as THREE.Group;
-    const bichonShadow = avatar.userData.shadow as THREE.Mesh;
+    let bichonRig = avatar.userData.rig as THREE.Group;
+    let bichonBody = avatar.userData.body as THREE.Mesh;
+    let bichonHead = avatar.userData.head as THREE.Mesh;
+    let bichonLegs = avatar.userData.legs as THREE.Mesh[];
+    let bichonTail = avatar.userData.tail as THREE.Group;
+    let bichonEars = avatar.userData.ears as THREE.Mesh[];
+    let bichonEyes = avatar.userData.eyes as THREE.Mesh[];
+    let bichonBow = avatar.userData.bow as THREE.Group;
+    let bichonShadow = avatar.userData.shadow as THREE.Mesh;
+    let importedBichon = false;
+    let bichonMixer: THREE.AnimationMixer | null = null;
+    let currentBichonAction: THREE.AnimationAction | null = null;
+    let currentBichonAnimation = "";
+    const bichonActions = new Map<string, THREE.AnimationAction>();
+    const playBichonAnimation = (name: "idle" | "run" | "jump" | "sniff" | "celebrate") => {
+      if (!bichonMixer || currentBichonAnimation === name) return;
+      const next = bichonActions.get(name);
+      if (!next) return;
+      next.reset().fadeIn(0.14).play();
+      currentBichonAction?.fadeOut(0.14);
+      currentBichonAction = next;
+      currentBichonAnimation = name;
+    };
+    const bichonLoader = new GLTFLoader();
+    bichonLoader.load("/models/anqi-bichon.glb", (gltf) => {
+      if (disposed) return;
+      const loaded = gltf.scene;
+      loaded.name = "AnqiBichonModel";
+      loaded.position.copy(avatar.position);
+      loaded.rotation.copy(avatar.rotation);
+      loaded.scale.copy(avatar.scale);
+      loaded.traverse((object) => {
+        if (object instanceof THREE.Mesh || object instanceof THREE.InstancedMesh) {
+          object.castShadow = !lightweight;
+          object.receiveShadow = true;
+          if (object.material?.name === "AnqiRose") object.material.color.set(liveRef.current.cosmeticColor);
+          if (lightweight && object.name.startsWith("FurTufts")) object.visible = false;
+        }
+      });
+      const oldAvatar = avatar;
+      oldAvatar.remove(reactionBurst);
+      loaded.add(reactionBurst);
+      scene.add(loaded);
+      scene.remove(oldAvatar);
+      avatar = loaded;
+      bichonRig = loaded.getObjectByName("BichonRig") as THREE.Group;
+      bichonBody = loaded.getObjectByName("Body") as THREE.Mesh;
+      bichonHead = loaded.getObjectByName("Head") as THREE.Mesh;
+      bichonLegs = ["LegFL", "LegFR", "LegBL", "LegBR"].map((name) => loaded.getObjectByName(name) as THREE.Mesh);
+      bichonTail = loaded.getObjectByName("Tail") as THREE.Group;
+      bichonEars = ["EarL", "EarR"].map((name) => loaded.getObjectByName(name) as THREE.Mesh);
+      bichonEyes = ["EyeL", "EyeR"].map((name) => loaded.getObjectByName(name) as THREE.Mesh);
+      bichonBow = loaded.getObjectByName("Bow") as THREE.Group;
+      const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.53, 28), new THREE.MeshBasicMaterial({ color: 0x25352f, transparent: true, opacity: 0.19, depthWrite: false }));
+      shadow.name = "ModelContactShadow";
+      shadow.rotation.x = -Math.PI / 2;
+      shadow.position.y = -0.57;
+      loaded.add(shadow);
+      bichonShadow = shadow;
+      bichonMixer = new THREE.AnimationMixer(loaded);
+      gltf.animations.forEach((clip) => bichonActions.set(clip.name, bichonMixer?.clipAction(clip) as THREE.AnimationAction));
+      importedBichon = true;
+      playBichonAnimation("idle");
+    }, undefined, () => {
+      // The carefully modelled in-code Bichon remains a playable fallback.
+    });
     const fireflyWings = lumi.userData.wings as THREE.Mesh[];
     const isStoryPositionBlocked = (x: number, z: number) => {
       if (z < -9.7 && z > -13.75 && Math.abs(x) > 1.72) return true;
@@ -1056,6 +1244,7 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
           verticalVelocity = 5.2;
           grounded = false;
           move.jump = false;
+          live.onMovementAudio("jump");
         }
       } else {
         releaseKeys();
@@ -1072,6 +1261,7 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
           verticalVelocity = 6.7;
           grounded = false;
           lastBounceAt = time;
+          live.onMovementAudio("jump");
         }
       }
 
@@ -1080,6 +1270,7 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
         avatar.position.y += verticalVelocity * delta;
         const landingHeight = live.endlessMode ? 0.58 : getStoryTerrainHeight(avatar.position.x, avatar.position.z);
         if (avatar.position.y <= landingHeight) {
+          if (verticalVelocity < -2.2) live.onMovementAudio("land");
           avatar.position.y = landingHeight;
           verticalVelocity = 0;
           grounded = true;
@@ -1098,26 +1289,41 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
       const wrongReaction = reactionActive && reaction?.kind === "wrong";
       const celebration = positiveReaction ? Math.sin(Math.min(1, reactionProgress) * Math.PI) : 0;
       const comfort = wrongReaction ? Math.sin(Math.min(1, reactionProgress) * Math.PI) : 0;
-      const targetRigY = (moving && !motionReduced ? Math.abs(gait) * 0.035 : Math.sin(time * 1.8) * 0.007) + celebration * (reaction?.kind === "word" ? 0.28 : 0.13) - comfort * 0.035;
-      bichonRig.position.y = THREE.MathUtils.lerp(bichonRig.position.y, targetRigY, animationAlpha);
-      bichonRig.rotation.z = THREE.MathUtils.lerp(bichonRig.rotation.z, moving && !motionReduced ? gait * 0.025 : comfort * 0.07, animationAlpha);
-      bichonBody.scale.y = THREE.MathUtils.lerp(bichonBody.scale.y, moving && !motionReduced ? 0.9 - Math.abs(gait) * 0.025 : 0.9 + Math.sin(time * 1.8) * 0.006, animationAlpha);
-      bichonHead.rotation.y = motionReduced ? 0 : Math.sin(time * (moving ? 2.6 : 1.15)) * (moving ? 0.025 : 0.06);
-      bichonHead.rotation.x = THREE.MathUtils.lerp(bichonHead.rotation.x, celebration * -0.12 + comfort * 0.16, animationAlpha);
-      bichonLegs.forEach((leg, index) => {
-        const stride = gait * (index % 2 === 0 ? 1 : -1);
-        leg.rotation.x = THREE.MathUtils.lerp(leg.rotation.x, moving && !motionReduced ? stride * 0.5 : 0, animationAlpha);
-      });
-      bichonTail.rotation.z = 0.28 + (motionReduced ? 0 : Math.sin(time * (positiveReaction ? 22 : moving ? 13 : 5.2)) * (positiveReaction ? 0.46 : moving ? 0.32 : 0.18));
-      bichonEars.forEach((ear, index) => {
-        const restingAngle = index === 0 ? 0.2 : -0.2;
-        const comfortDroop = comfort * (index === 0 ? -0.22 : 0.22);
-        ear.rotation.z = restingAngle + comfortDroop + (moving && !motionReduced ? gait * (index === 0 ? 0.08 : -0.08) : 0);
-      });
-      const blinkCycle = time % 4.6;
-      const blinkScale = blinkCycle > 4.47 ? 0.16 : 1;
-      bichonEyes.forEach((eye) => { eye.scale.y = THREE.MathUtils.lerp(eye.scale.y, positiveReaction ? 0.58 : blinkScale * 1.08, animationAlpha); });
-      bichonBow.rotation.z = motionReduced ? 0 : Math.sin(time * (positiveReaction ? 15 : 2.3)) * (positiveReaction ? 0.12 : 0.025);
+      if (importedBichon) {
+        const sniffing = !moving && grounded && !positiveReaction && time % 9.2 > 6.9;
+        playBichonAnimation(!grounded ? "jump" : positiveReaction && reaction?.kind === "word" ? "celebrate" : moving ? "run" : sniffing ? "sniff" : "idle");
+        bichonMixer?.update(motionReduced ? Math.min(delta, 0.012) : delta);
+      } else {
+        const targetRigY = (moving && !motionReduced ? Math.abs(gait) * 0.035 : Math.sin(time * 1.8) * 0.007) + celebration * (reaction?.kind === "word" ? 0.28 : 0.13) - comfort * 0.035;
+        bichonRig.position.y = THREE.MathUtils.lerp(bichonRig.position.y, targetRigY, animationAlpha);
+        bichonRig.rotation.z = THREE.MathUtils.lerp(bichonRig.rotation.z, moving && !motionReduced ? gait * 0.025 : comfort * 0.07, animationAlpha);
+        bichonBody.scale.y = THREE.MathUtils.lerp(bichonBody.scale.y, moving && !motionReduced ? 0.9 - Math.abs(gait) * 0.025 : 0.9 + Math.sin(time * 1.8) * 0.006, animationAlpha);
+        bichonHead.rotation.y = motionReduced ? 0 : Math.sin(time * (moving ? 2.6 : 1.15)) * (moving ? 0.025 : 0.06);
+        bichonHead.rotation.x = THREE.MathUtils.lerp(bichonHead.rotation.x, celebration * -0.12 + comfort * 0.16, animationAlpha);
+        bichonLegs.forEach((leg, index) => {
+          const stride = gait * (index % 2 === 0 ? 1 : -1);
+          leg.rotation.x = THREE.MathUtils.lerp(leg.rotation.x, moving && !motionReduced ? stride * 0.5 : 0, animationAlpha);
+        });
+        bichonTail.rotation.z = 0.28 + (motionReduced ? 0 : Math.sin(time * (positiveReaction ? 22 : moving ? 13 : 5.2)) * (positiveReaction ? 0.46 : moving ? 0.32 : 0.18));
+        bichonEars.forEach((ear, index) => {
+          const restingAngle = index === 0 ? 0.2 : -0.2;
+          const comfortDroop = comfort * (index === 0 ? -0.22 : 0.22);
+          ear.rotation.z = restingAngle + comfortDroop + (moving && !motionReduced ? gait * (index === 0 ? 0.08 : -0.08) : 0);
+        });
+        const blinkCycle = time % 4.6;
+        const blinkScale = blinkCycle > 4.47 ? 0.16 : 1;
+        bichonEyes.forEach((eye) => { eye.scale.y = THREE.MathUtils.lerp(eye.scale.y, positiveReaction ? 0.58 : blinkScale * 1.08, animationAlpha); });
+        bichonBow.rotation.z = motionReduced ? 0 : Math.sin(time * (positiveReaction ? 15 : 2.3)) * (positiveReaction ? 0.12 : 0.025);
+      }
+      if (moving && grounded) {
+        stepClock += delta;
+        if (stepClock >= (live.endlessMode ? 0.28 : 0.32)) {
+          stepClock = 0;
+          live.onMovementAudio("step");
+        }
+      } else {
+        stepClock = Math.min(stepClock, 0.16);
+      }
       reactionBurst.visible = positiveReaction && !motionReduced;
       if (reactionBurst.visible) {
         reactionBurst.rotation.y = time * 1.8;
@@ -1143,6 +1349,22 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
         lastNearby = nextNearby;
         nearbyRef.current = nextNearby;
         setNearby(nextNearby);
+      }
+      let nextDiscovery: WorldDiscoveryId | null = null;
+      let nearestDiscoveryDistance = Infinity;
+      if (live.mode === "explore" && !live.endlessMode) {
+        WORLD_DISCOVERIES.forEach((discovery) => {
+          if (discovery.kind === "collectible" && live.discoveredIds.includes(discovery.id)) return;
+          const discoveryDistance = Math.hypot(avatar.position.x - discovery.position.x, avatar.position.z - discovery.position.z);
+          if (discoveryDistance < 1.7 && discoveryDistance < nearestDiscoveryDistance) {
+            nearestDiscoveryDistance = discoveryDistance;
+            nextDiscovery = discovery.id;
+          }
+        });
+      }
+      if (nextDiscovery !== nearbyDiscoveryRef.current) {
+        nearbyDiscoveryRef.current = nextDiscovery;
+        setNearbyDiscovery(nextDiscovery);
       }
 
       const completedCount = getCompletedEncounterCount(live.completedWords);
@@ -1206,7 +1428,7 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
           lastStatusDistance = distanceTravelled;
           lastStatusZone = zone;
           lastClickStatus = hasClickTarget;
-          live.onWorldStatus({ distance: distanceTravelled, zone, biome: biome.name, movingByClick: hasClickTarget });
+          live.onWorldStatus({ distance: distanceTravelled, zone, biome: biome.name, movingByClick: hasClickTarget, quality: qualityMode });
         }
       } else {
         lastBiomeVisualIndex = -1;
@@ -1255,6 +1477,15 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
         pad.scale.y = 0.82 + Math.sin(time * 3.2 + index) * 0.12;
         pad.rotation.y = time * 0.4 + index;
       });
+      discoveryObjects.forEach((object, id) => {
+        const discovery = getWorldDiscovery(id);
+        if (!discovery) return;
+        object.visible = discovery.kind === "npc" || !live.discoveredIds.includes(id);
+        const animatedPart = object.userData.animatedPart as THREE.Object3D | undefined;
+        const halo = object.userData.halo as THREE.Object3D | undefined;
+        if (animatedPart && object.visible && !motionReduced) animatedPart.position.y = (object.userData.baseAnimatedY as number) + Math.sin(time * 2.3 + discovery.position.x) * 0.025;
+        if (halo && object.visible) halo.rotation.y = time * (discovery.kind === "npc" ? 1.1 : 0.55);
+      });
       if (destinationMarker.visible) {
         destinationMarker.rotation.y = time * 1.4;
         destinationMarker.scale.setScalar(1 + Math.sin(time * 5) * 0.08);
@@ -1284,11 +1515,30 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
       performanceSampleFrames += 1;
       if (performanceSampleTime >= 4) {
         const averageFrame = performanceSampleTime / performanceSampleFrames;
-        const nextQuality = averageFrame > 0.024 ? Math.max(0.68, qualityScale - 0.12) : averageFrame < 0.0175 ? Math.min(1, qualityScale + 0.06) : qualityScale;
+        const qualityDecision = getPerformanceQuality(averageFrame, qualityScale, lightweight);
+        const nextQuality = qualityDecision.scale;
         if (Math.abs(nextQuality - qualityScale) > 0.01) {
           qualityScale = nextQuality;
           renderer.setPixelRatio(nativePixelRatio * qualityScale);
           resize();
+        }
+        const nextMode: ExplorationWorldStatus["quality"] = qualityDecision.mode;
+        if (nextMode !== qualityMode) {
+          qualityMode = nextMode;
+          renderer.shadowMap.enabled = qualityMode === "精细";
+          petals.forEach((petal, index) => { petal.visible = qualityMode === "精细" || index % 2 === 0; });
+          atmosphereMotes.visible = qualityMode === "精细";
+          const furBody = avatar.getObjectByName("FurTuftsBody");
+          const furHead = avatar.getObjectByName("FurTuftsHead");
+          if (furBody) furBody.visible = qualityMode === "精细";
+          if (furHead) furHead.visible = qualityMode === "精细";
+          live.onWorldStatus({
+            distance: Math.max(0, Math.floor(-avatar.position.z - 24)),
+            zone: live.endlessMode ? Math.floor(live.endlessWords / 5) + 1 : 0,
+            biome: live.endlessMode ? getEndlessBiome(Math.floor(live.endlessWords / 5)).name : "樱花谷",
+            movingByClick: hasClickTarget,
+            quality: qualityMode,
+          });
         }
         performanceSampleTime = 0;
         performanceSampleFrames = 0;
@@ -1305,6 +1555,7 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
     animate();
 
     return () => {
+      disposed = true;
       window.cancelAnimationFrame(frame);
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
@@ -1314,6 +1565,7 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
       renderer.domElement.removeEventListener("webglcontextlost", onContextLost);
       resizeObserver.disconnect();
       resetRef.current = null;
+      discoveryObjectsRef.current.clear();
       disposeScene(scene);
       skyTexture.dispose();
       grassTexture?.dispose();
@@ -1326,6 +1578,7 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
 
   const current = props.endlessMode ? getEndlessEncounter(props.endlessWords) : getExplorationEncounter(props.completedWords);
   const nearbyEncounter = current?.id === nearby ? current : EXPLORATION_ENCOUNTERS.find((encounter) => encounter.id === nearby) ?? null;
+  const discovery = nearbyDiscovery ? getWorldDiscovery(nearbyDiscovery) : null;
 
   if (fallback) {
     return (
@@ -1353,13 +1606,11 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
       <div ref={mountRef} className="exploration-canvas" aria-hidden="true" />
       {props.mode === "explore" && (
         <>
-          <div className="world-atmosphere-badge"><i />实景光照 · 樱花微风</div>
-          <div className={`interaction-prompt ${nearbyEncounter ? "visible" : ""}`} aria-live="polite">
-            <span>{nearbyEncounter?.icon ?? "⌁"}</span>
-            <div><small>{nearbyEncounter ? props.endlessMode ? `发现随机奇遇 · 第 ${nearbyEncounter.number} 区` : `发现机关 · 第 ${nearbyEncounter.number}/3 站` : props.endlessMode ? "点击远处路面，安琪会自动前往" : "沿花瓣小路探索"}</small><strong>{nearbyEncounter?.title ?? (props.endlessMode ? "寻找下一座星愿碑" : "寻找发光的花印")}</strong></div>
-            {nearbyEncounter && <button onClick={interact}><kbd>Enter</kbd> 开始解谜</button>}
+          <div className={`interaction-prompt ${nearbyEncounter || discovery ? "visible" : ""}`} aria-live="polite">
+            <span>{discovery ? discovery.kind === "npc" ? "☺" : "✦" : nearbyEncounter?.icon ?? "⌁"}</span>
+            <div><small>{discovery ? discovery.kind === "npc" ? "遇见花园朋友" : "发现隐藏收藏" : nearbyEncounter ? props.endlessMode ? `发现随机奇遇 · 第 ${nearbyEncounter.number} 区` : `发现机关 · 第 ${nearbyEncounter.number}/3 站` : props.endlessMode ? "点击远处路面，安琪会自动前往" : "沿花瓣小路探索"}</small><strong>{discovery?.name ?? nearbyEncounter?.title ?? (props.endlessMode ? "寻找下一座星愿碑" : "寻找发光的花印")}</strong></div>
+            {(nearbyEncounter || discovery) && <button onClick={interact}><kbd>Enter</kbd> {discovery ? discovery.kind === "npc" ? "打招呼" : "收集" : "开始解谜"}</button>}
           </div>
-          <div className="explore-controls-hint"><span><kbd>鼠标点击</kbd> 自动前往</span><span><kbd>↑↓←→</kbd> 自由移动</span><span><kbd>Space</kbd> 跳跃</span><span><kbd>Enter</kbd> 互动</span></div>
           <div className="mobile-explore-controls" aria-label="触屏探索控制">
             <div className="mobile-move-pad">
               <button className="move-up" aria-label="向前移动" {...bindMove("forward")}>▲</button>
@@ -1370,7 +1621,7 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
             </div>
             <div className="mobile-action-pad">
               <button className="jump-action" aria-label="跳跃" {...bindMove("jump")}><i>↑</i><span>跳跃</span></button>
-              <button className="interact-action" aria-label="与机关互动" onClick={interact} disabled={!nearbyEncounter}><i>✦</i><span>互动</span></button>
+              <button className="interact-action" aria-label="与机关、收藏或朋友互动" onClick={interact} disabled={!nearbyEncounter && !discovery}><i>✦</i><span>互动</span></button>
             </div>
           </div>
         </>

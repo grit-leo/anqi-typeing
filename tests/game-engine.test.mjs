@@ -13,6 +13,7 @@ import {
   GARDEN_WORLDS,
   getDailyTarget,
   getAdaptiveLevelWord,
+  getAdaptiveTargetKeys,
   getEarnedPetals,
   getLevelWord,
   getLessonAct,
@@ -179,6 +180,11 @@ test("infinite world records migrate and remain part of each child profile", () 
   assert.deepEqual(migrated.endless, { bestDistance: 480, bestEvents: 24 });
 });
 
+test("hidden-world discoveries persist safely across save migration", () => {
+  const migrated = migrateGardenProgress({ ...DEFAULT_GARDEN_PROGRESS, discoveries: ["dew-crystal", "momo-guide", "dew-crystal"] });
+  assert.deepEqual(migrated.discoveries, ["dew-crystal", "momo-guide"]);
+});
+
 test("practice adapts to weak keys and recommends an unlocked review lesson", () => {
   const mastery = {
     f: { attempts: 12, correct: 5, streak: 0, score: 42 },
@@ -192,6 +198,19 @@ test("practice adapts to weak keys and recommends an unlocked review lesson", ()
   assert.equal(getLearningRecommendation({ ...DEFAULT_GARDEN_PROGRESS, keyMastery: mastery }).targetKey, "f");
   assert.equal(getSessionSupport(8, 0, 0).mode, "steady");
   assert.equal(getSessionSupport(4, 3, 2).mode, "guided");
+});
+
+test("live adaptation combines mistakes with slow reaction time before choosing the next word", () => {
+  const level = GARDEN_LEVELS[0];
+  const session = {
+    f: { attempts: 4, correct: 4, bestStreak: 4, totalReactionMs: 5600, slowAttempts: 4 },
+    j: { attempts: 4, correct: 4, bestStreak: 4, totalReactionMs: 1800, slowAttempts: 0 },
+  };
+  assert.equal(getAdaptiveTargetKeys(level, {}, session)[0], "f");
+  assert.match(getAdaptiveLevelWord(level, 2, {}, session), /f/i);
+  const mastery = mergeKeyMastery({}, session);
+  assert.ok(mastery.f.averageReactionMs > mastery.j.averageReactionMs);
+  assert.ok(mastery.f.speedScore < mastery.j.speedScore);
 });
 
 test("personal garden and Lumi bond grow from practice without a new save schema", () => {

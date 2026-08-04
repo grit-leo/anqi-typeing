@@ -5,6 +5,7 @@ import {
   EXPLORATION_TOTAL_WORDS,
   ENDLESS_BIOMES,
   ENDLESS_CHUNK_LENGTH,
+  WORLD_DISCOVERIES,
   getEndlessBiome,
   getEndlessEncounter,
   getEndlessEncounterProgress,
@@ -13,6 +14,8 @@ import {
   getEncounterProgress,
   getExplorationCheckpoint,
   getExplorationEncounter,
+  getPerformanceQuality,
+  getWorldDiscovery,
   isExplorationBoundary,
   isEndlessBoundary,
 } from "../app/exploration-engine.ts";
@@ -27,6 +30,23 @@ test("the Sakura Valley adventure has three contiguous five-word encounters", ()
     assert.ok(encounter.story.length >= 20);
     assert.ok(encounter.success.length >= 12);
   });
+});
+
+test("branch routes contain persistent collectibles and friendly NPC discoveries", () => {
+  assert.equal(WORLD_DISCOVERIES.length, 4);
+  assert.equal(WORLD_DISCOVERIES.filter((item) => item.kind === "collectible").length, 2);
+  assert.equal(WORLD_DISCOVERIES.filter((item) => item.kind === "npc").length, 2);
+  assert.equal(getWorldDiscovery("momo-guide")?.name, "向导茉茉");
+  assert.ok(WORLD_DISCOVERIES.every((item) => Math.abs(item.position.x) >= 4.9));
+});
+
+test("render quality automatically drops effects after sustained slow frames and recovers gradually", () => {
+  assert.deepEqual(getPerformanceQuality(0.03, 1, false), { scale: 0.88, mode: "流畅" });
+  const recovering = getPerformanceQuality(0.016, 0.82, false);
+  assert.ok(Math.abs(recovering.scale - 0.88) < 0.0001);
+  assert.equal(recovering.mode, "流畅");
+  assert.equal(getPerformanceQuality(0.016, 1, false).mode, "精细");
+  assert.equal(getPerformanceQuality(0.016, 1, true).mode, "流畅");
 });
 
 test("the endless world cycles biomes while events continue without a fixed end", () => {
