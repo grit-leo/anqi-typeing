@@ -20,7 +20,7 @@ test("server-renders the full-screen Magic Garden commercial game", async () => 
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
-  assert.match(html, /<title>安琪打字机｜四界大型打字冒险<\/title>/i);
+  assert.match(html, /<title>安琪打字机｜比熊的星愿打字冒险<\/title>/i);
   assert.match(html, /安琪打字机/);
   assert.match(html, /星愿花园/);
   assert.match(html, /开始冒险/);
@@ -177,6 +177,10 @@ test("includes real WebGL, large-game systems, touch input, safety and persisten
   assert.match(exploration, /intersectObjects\(walkableMeshes/);
   assert.match(exploration, /endlessChunks/);
   assert.match(exploration, /bouncePads/);
+  assert.match(exploration, /0xfffbf2/);
+  assert.match(exploration, /bichonTail/);
+  assert.match(exploration, /createGroundTexture/);
+  assert.match(exploration, /Math\.exp\(-delta/);
   assert.match(explorationEngine, /rune-gate/);
   assert.match(explorationEngine, /moon-bridge/);
   assert.match(explorationEngine, /wish-beacon/);
@@ -217,7 +221,7 @@ test("includes real WebGL, large-game systems, touch input, safety and persisten
   assert.match(css, /\.encounter-console/);
   assert.match(css, /\.endless-world-status/);
   assert.match(css, /\.endless-minimap/);
-  assert.match(layout, /og-v6\.jpg/);
+  assert.match(layout, /og-bichon-v1\.png/);
   assert.match(layout, /summary_large_image/);
   assert.match(layout, /lang="zh-CN"/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);

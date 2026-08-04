@@ -62,37 +62,84 @@ function disposeScene(scene: THREE.Scene) {
   });
 }
 
+function createGroundTexture(base: string, flecks: string[], seed: number) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 128;
+  canvas.height = 128;
+  const context = canvas.getContext("2d");
+  if (!context) return null;
+  context.fillStyle = base;
+  context.fillRect(0, 0, 128, 128);
+  let state = seed >>> 0;
+  const random = () => {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    return state / 4294967296;
+  };
+  for (let index = 0; index < 440; index += 1) {
+    context.globalAlpha = 0.1 + random() * 0.2;
+    context.fillStyle = flecks[index % flecks.length];
+    const size = 0.45 + random() * 1.6;
+    context.beginPath();
+    context.ellipse(random() * 128, random() * 128, size * 0.42, size, random() * Math.PI, 0, Math.PI * 2);
+    context.fill();
+  }
+  context.globalAlpha = 1;
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  return texture;
+}
+
+function enableSoftShadows(object: THREE.Object3D) {
+  object.traverse((child) => {
+    if (child instanceof THREE.Mesh) {
+      child.castShadow = true;
+      child.receiveShadow = true;
+    }
+  });
+}
+
 function addFlower(parent: THREE.Object3D, x: number, z: number, color: number, scale = 1) {
   const flower = new THREE.Group();
-  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.035, 0.5, 7), new THREE.MeshStandardMaterial({ color: 0x5f9b61, roughness: 0.85 }));
-  stem.position.y = 0.25;
+  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.02, 0.38, 6), new THREE.MeshStandardMaterial({ color: 0x527b4d, roughness: 0.92 }));
+  stem.position.y = 0.19;
   flower.add(stem);
-  const petalMaterial = new THREE.MeshStandardMaterial({ color, roughness: 0.55, emissive: color, emissiveIntensity: 0.06 });
-  for (let index = 0; index < 5; index += 1) {
-    const petal = new THREE.Mesh(new THREE.SphereGeometry(0.105, 8, 6), petalMaterial);
-    const angle = (index / 5) * Math.PI * 2;
-    petal.position.set(Math.cos(angle) * 0.12, 0.55 + Math.sin(angle) * 0.12, Math.sin(angle) * 0.12);
-    petal.scale.set(0.75, 1.25, 0.55);
+  const petalMaterial = new THREE.MeshStandardMaterial({ color, roughness: 0.82, side: THREE.DoubleSide });
+  for (let index = 0; index < 6; index += 1) {
+    const petal = new THREE.Mesh(new THREE.SphereGeometry(0.064, 8, 5), petalMaterial);
+    const angle = (index / 6) * Math.PI * 2;
+    petal.position.set(Math.cos(angle) * 0.074, 0.4 + Math.sin(angle) * 0.025, Math.sin(angle) * 0.074);
+    petal.scale.set(0.7, 0.26, 1.15);
+    petal.rotation.y = angle;
     flower.add(petal);
   }
-  const center = new THREE.Mesh(new THREE.SphereGeometry(0.065, 9, 7), new THREE.MeshStandardMaterial({ color: 0xffdf77, emissive: 0xffc84e, emissiveIntensity: 0.18 }));
-  center.position.y = 0.55;
+  const center = new THREE.Mesh(new THREE.SphereGeometry(0.038, 8, 6), new THREE.MeshStandardMaterial({ color: 0xe3b24b, roughness: 0.72 }));
+  center.position.y = 0.41;
   flower.add(center);
-  flower.position.set(x, 0.22, z);
+  flower.position.set(x, 0.04, z);
   flower.scale.setScalar(scale);
   parent.add(flower);
 }
 
 function addTree(parent: THREE.Object3D, x: number, z: number, scale: number, color: number) {
   const tree = new THREE.Group();
-  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.25, 1.9, 9), new THREE.MeshStandardMaterial({ color: 0x7f5961, roughness: 0.96 }));
+  const barkMaterial = new THREE.MeshStandardMaterial({ color: 0x6f5549, roughness: 1 });
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.27, 1.9, 10), barkMaterial);
   trunk.position.y = 1.05;
   trunk.castShadow = true;
   tree.add(trunk);
-  const blossomMaterial = new THREE.MeshStandardMaterial({ color, roughness: 0.7, emissive: color, emissiveIntensity: 0.04 });
-  [[0, 2.1, 0], [-0.45, 1.95, 0.04], [0.42, 1.96, -0.06], [-0.18, 2.42, 0.05], [0.25, 2.35, 0.08]].forEach(([px, py, pz], index) => {
-    const crown = new THREE.Mesh(new THREE.IcosahedronGeometry(index === 0 ? 0.72 : 0.55, 1), blossomMaterial);
+  [[-0.2, 1.7, 0.04, -0.55], [0.24, 1.72, -0.03, 0.56], [0.03, 1.9, -0.12, 0.12]].forEach(([px, py, pz, angle]) => {
+    const branch = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.075, 0.92, 7), barkMaterial);
+    branch.position.set(px, py, pz);
+    branch.rotation.z = angle;
+    tree.add(branch);
+  });
+  const blossomMaterial = new THREE.MeshStandardMaterial({ color, roughness: 0.88 });
+  [[0, 2.15, 0], [-0.48, 1.98, 0.06], [0.46, 2.01, -0.08], [-0.2, 2.45, 0.04], [0.28, 2.38, 0.1], [-0.62, 2.28, -0.02], [0.62, 2.3, 0.02]].forEach(([px, py, pz], index) => {
+    const crown = new THREE.Mesh(new THREE.DodecahedronGeometry(index === 0 ? 0.57 : 0.43, 1), blossomMaterial);
     crown.position.set(px, py, pz);
+    crown.scale.set(1, 0.82 + (index % 3) * 0.08, 0.92);
     crown.castShadow = true;
     tree.add(crown);
   });
@@ -122,62 +169,142 @@ function addLantern(parent: THREE.Object3D, x: number, z: number) {
 
 function makeAvatar(color: string) {
   const avatar = new THREE.Group();
-  const bodyMaterial = new THREE.MeshStandardMaterial({ color, roughness: 0.52, metalness: 0.04 });
-  const trimMaterial = new THREE.MeshStandardMaterial({ color: 0xfff0bd, roughness: 0.48, emissive: 0xffc46d, emissiveIntensity: 0.1 });
-  const skinMaterial = new THREE.MeshStandardMaterial({ color: 0xffd4bd, roughness: 0.7 });
-  const hairMaterial = new THREE.MeshStandardMaterial({ color: 0x35294f, roughness: 0.78 });
-  const body = new THREE.Mesh(new THREE.SphereGeometry(0.42, 20, 14), bodyMaterial);
-  body.scale.set(0.92, 1.12, 0.78);
-  body.position.y = 0.65;
-  body.castShadow = true;
-  avatar.add(body);
-  const skirt = new THREE.Mesh(new THREE.ConeGeometry(0.5, 0.55, 18), bodyMaterial);
-  skirt.position.y = 0.3;
-  skirt.castShadow = true;
-  avatar.add(skirt);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.34, 20, 16), skinMaterial);
-  head.position.y = 1.22;
-  head.castShadow = true;
-  avatar.add(head);
-  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.36, 20, 14, 0, Math.PI * 2, 0, Math.PI * 0.62), hairMaterial);
-  hair.position.set(0, 1.3, 0.015);
-  hair.rotation.x = -0.14;
-  avatar.add(hair);
-  const ponytail = new THREE.Mesh(new THREE.SphereGeometry(0.18, 14, 10), hairMaterial);
-  ponytail.scale.set(0.9, 1.5, 0.85);
-  ponytail.position.set(-0.28, 1.24, 0.19);
-  avatar.add(ponytail);
-  const crown = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.26, 5), trimMaterial);
-  crown.position.set(0, 1.62, 0);
-  avatar.add(crown);
-  const wand = new THREE.Group();
-  const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.035, 0.7, 7), trimMaterial);
-  stick.rotation.z = -0.2;
-  wand.add(stick);
-  const star = new THREE.Mesh(new THREE.OctahedronGeometry(0.12, 0), trimMaterial);
-  star.position.set(0.08, 0.39, 0);
-  wand.add(star);
-  wand.position.set(0.43, 0.6, 0.04);
-  avatar.add(wand);
+  const rig = new THREE.Group();
+  avatar.add(rig);
+  const fur = new THREE.MeshStandardMaterial({ color: 0xfffbf2, roughness: 0.98, metalness: 0 });
+  const warmFur = new THREE.MeshStandardMaterial({ color: 0xf2e9dc, roughness: 1 });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x211d27, roughness: 0.68 });
+  const accent = new THREE.MeshStandardMaterial({ color, roughness: 0.55, metalness: 0.03 });
+  const gold = new THREE.MeshStandardMaterial({ color: 0xf5c866, roughness: 0.48, metalness: 0.22 });
+
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.43, 22, 17), fur);
+  body.position.set(0, 0.03, -0.02);
+  body.scale.set(1.08, 0.9, 1.02);
+  rig.add(body);
+  const chest = new THREE.Mesh(new THREE.SphereGeometry(0.31, 18, 14), warmFur);
+  chest.position.set(0, 0.05, 0.29);
+  chest.scale.set(1.05, 1.15, 0.54);
+  rig.add(chest);
+
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.43, 24, 18), fur);
+  head.position.set(0, 0.55, 0.08);
+  head.scale.set(1.08, 1.03, 0.98);
+  rig.add(head);
+  const curlGeometry = new THREE.DodecahedronGeometry(0.15, 1);
+  [[-0.3, 0.72, 0.08], [0.3, 0.72, 0.08], [-0.2, 0.88, 0.04], [0.2, 0.88, 0.04], [0, 0.91, 0.08], [-0.36, 0.5, 0.1], [0.36, 0.5, 0.1]].forEach(([x, y, z], index) => {
+    const curl = new THREE.Mesh(curlGeometry, index % 3 === 0 ? warmFur : fur);
+    curl.position.set(x, y, z);
+    curl.scale.setScalar(0.9 + (index % 2) * 0.12);
+    rig.add(curl);
+  });
+
+  const muzzle = new THREE.Mesh(new THREE.SphereGeometry(0.19, 18, 13), warmFur);
+  muzzle.position.set(0, 0.49, 0.39);
+  muzzle.scale.set(1.1, 0.72, 0.78);
+  rig.add(muzzle);
+  const nose = new THREE.Mesh(new THREE.SphereGeometry(0.064, 14, 10), dark);
+  nose.position.set(0, 0.53, 0.54);
+  nose.scale.set(1.08, 0.8, 0.72);
+  rig.add(nose);
+  const eyes: THREE.Mesh[] = [];
+  for (const x of [-0.145, 0.145]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.057, 14, 10), dark);
+    eye.position.set(x, 0.66, 0.42);
+    eye.scale.set(0.9, 1.08, 0.62);
+    rig.add(eye);
+    const sparkle = new THREE.Mesh(new THREE.SphereGeometry(0.014, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+    sparkle.position.set(x - 0.014, 0.681, 0.455);
+    rig.add(sparkle);
+    eyes.push(eye);
+  }
+
+  const ears: THREE.Mesh[] = [];
+  for (const x of [-0.39, 0.39]) {
+    const ear = new THREE.Mesh(new THREE.CapsuleGeometry(0.13, 0.25, 6, 12), warmFur);
+    ear.position.set(x, 0.51, 0.03);
+    ear.rotation.z = x < 0 ? 0.2 : -0.2;
+    ear.scale.set(0.86, 1.08, 0.76);
+    rig.add(ear);
+    ears.push(ear);
+  }
+
+  const legs: THREE.Mesh[] = [];
+  [[-0.25, 0.2], [0.25, 0.2], [-0.25, -0.2], [0.25, -0.2]].forEach(([x, z]) => {
+    const leg = new THREE.Mesh(new THREE.CapsuleGeometry(0.105, 0.18, 5, 10), fur);
+    leg.position.set(x, -0.36, z);
+    rig.add(leg);
+    const paw = new THREE.Mesh(new THREE.SphereGeometry(0.13, 12, 9), warmFur);
+    paw.position.set(x, -0.52, z + 0.035);
+    paw.scale.set(1, 0.62, 1.24);
+    rig.add(paw);
+    legs.push(leg);
+  });
+
+  const tail = new THREE.Group();
+  tail.position.set(0.27, 0.12, -0.38);
+  [[0, 0, 0], [0.08, 0.13, -0.03], [0.03, 0.26, 0.02]].forEach(([x, y, z], index) => {
+    const puff = new THREE.Mesh(new THREE.DodecahedronGeometry(0.15 - index * 0.012, 1), fur);
+    puff.position.set(x, y, z);
+    tail.add(puff);
+  });
+  rig.add(tail);
+
+  const collar = new THREE.Mesh(new THREE.TorusGeometry(0.31, 0.035, 8, 24), accent);
+  collar.position.set(0, 0.3, 0.06);
+  collar.rotation.x = Math.PI / 2;
+  collar.scale.z = 0.92;
+  rig.add(collar);
+  const tag = new THREE.Mesh(new THREE.OctahedronGeometry(0.075, 0), gold);
+  tag.position.set(0, 0.25, 0.37);
+  tag.rotation.z = Math.PI / 4;
+  rig.add(tag);
+  const bow = new THREE.Group();
+  for (const x of [-0.11, 0.11]) {
+    const wing = new THREE.Mesh(new THREE.SphereGeometry(0.105, 12, 9), accent);
+    wing.position.x = x;
+    wing.scale.set(1.3, 0.72, 0.46);
+    bow.add(wing);
+  }
+  const bowCenter = new THREE.Mesh(new THREE.SphereGeometry(0.057, 10, 8), gold);
+  bow.add(bowCenter);
+  bow.position.set(0, 0.42, -0.39);
+  rig.add(bow);
+
+  const contactShadow = new THREE.Mesh(
+    new THREE.CircleGeometry(0.52, 28),
+    new THREE.MeshBasicMaterial({ color: 0x25352f, transparent: true, opacity: 0.2, depthWrite: false }),
+  );
+  contactShadow.rotation.x = -Math.PI / 2;
+  contactShadow.position.y = -0.565;
+  avatar.add(contactShadow);
+  enableSoftShadows(rig);
+  eyes.forEach((eye) => { eye.castShadow = false; });
+  avatar.userData.rig = rig;
   avatar.userData.body = body;
-  avatar.userData.wand = wand;
+  avatar.userData.head = head;
+  avatar.userData.legs = legs;
+  avatar.userData.tail = tail;
+  avatar.userData.ears = ears;
+  avatar.userData.shadow = contactShadow;
   return avatar;
 }
 
 function makeCompanion() {
   const lumi = new THREE.Group();
-  const fur = new THREE.MeshStandardMaterial({ color: 0xfff8ff, roughness: 0.62, emissive: 0xc5b6ff, emissiveIntensity: 0.12 });
-  const body = new THREE.Mesh(new THREE.SphereGeometry(0.2, 14, 10), fur);
-  body.scale.y = 1.15;
-  lumi.add(body);
-  for (const x of [-0.09, 0.09]) {
-    const ear = new THREE.Mesh(new THREE.CapsuleGeometry(0.045, 0.23, 4, 8), fur);
-    ear.position.set(x, 0.28, 0);
-    ear.rotation.z = x < 0 ? -0.15 : 0.15;
-    lumi.add(ear);
+  const core = new THREE.Mesh(new THREE.SphereGeometry(0.1, 12, 9), new THREE.MeshBasicMaterial({ color: 0xffefb0 }));
+  lumi.add(core);
+  const wingMaterial = new THREE.MeshBasicMaterial({ color: 0xe5f7ff, transparent: true, opacity: 0.72, side: THREE.DoubleSide });
+  const wings: THREE.Mesh[] = [];
+  for (const x of [-0.12, 0.12]) {
+    const wing = new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 7), wingMaterial);
+    wing.position.x = x;
+    wing.scale.set(0.78, 0.34, 1.28);
+    lumi.add(wing);
+    wings.push(wing);
   }
-  const glow = new THREE.PointLight(0xcdbaff, 0.7, 3);
+  const glow = new THREE.PointLight(0xffdc78, 0.85, 3.4, 2);
   lumi.add(glow);
+  lumi.userData.wings = wings;
   return lumi;
 }
 
@@ -217,54 +344,74 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
       return;
     }
 
-    const lightweight = window.innerWidth < 800 || (navigator.hardwareConcurrency ?? 8) <= 4;
+    const compactViewport = window.innerWidth < 800;
+    const lightweight = (navigator.hardwareConcurrency ?? 8) <= 4;
     let renderer: THREE.WebGLRenderer;
     try {
-      renderer = new THREE.WebGLRenderer({ antialias: !lightweight, alpha: false, powerPreference: "high-performance" });
+      renderer = new THREE.WebGLRenderer({ antialias: !lightweight, alpha: false, powerPreference: "high-performance", stencil: false });
     } catch {
       window.requestAnimationFrame(() => setFallback(true));
       return;
     }
 
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, lightweight ? 1.15 : 1.55));
+    const pixelRatioCap = lightweight ? 1.08 : compactViewport ? 1.35 : 1.55;
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, pixelRatioCap));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.13;
+    renderer.toneMappingExposure = 1.05;
     renderer.shadowMap.enabled = !lightweight;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.type = THREE.PCFShadowMap;
     mount.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x91c8e6);
-    scene.fog = new THREE.FogExp2(0xa5b9d1, 0.021);
-    const camera = new THREE.PerspectiveCamera(52, 1, 0.1, 120);
+    scene.background = new THREE.Color(0x8dbdd1);
+    scene.fog = new THREE.FogExp2(0xc1ccd0, 0.0175);
+    const camera = new THREE.PerspectiveCamera(49, 1, 0.1, 145);
     camera.position.set(0, 4.7, 10.5);
 
     const sky = new THREE.Mesh(
       new THREE.SphereGeometry(72, 28, 18),
       new THREE.ShaderMaterial({
         side: THREE.BackSide,
-        uniforms: { topColor: { value: new THREE.Color(0x78b9df) }, bottomColor: { value: new THREE.Color(0xffd8e7) }, offset: { value: 8 }, exponent: { value: 0.72 } },
+        uniforms: {
+          topColor: { value: new THREE.Color(0x4f94bd) },
+          horizonColor: { value: new THREE.Color(0xf1d7c9) },
+          sunColor: { value: new THREE.Color(0xfff2c4) },
+          offset: { value: 7 },
+          exponent: { value: 0.68 },
+        },
         vertexShader: "varying vec3 vWorldPosition; void main(){vec4 worldPosition=modelMatrix*vec4(position,1.0);vWorldPosition=worldPosition.xyz;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}",
-        fragmentShader: "uniform vec3 topColor;uniform vec3 bottomColor;uniform float offset;uniform float exponent;varying vec3 vWorldPosition;void main(){float h=normalize(vWorldPosition+offset).y;gl_FragColor=vec4(mix(bottomColor,topColor,max(pow(max(h,0.0),exponent),0.0)),1.0);}",
+        fragmentShader: "uniform vec3 topColor;uniform vec3 horizonColor;uniform vec3 sunColor;uniform float offset;uniform float exponent;varying vec3 vWorldPosition;void main(){vec3 d=normalize(vWorldPosition);float h=normalize(vWorldPosition+offset).y;float sun=pow(max(dot(d,normalize(vec3(-0.34,0.48,-0.81))),0.0),180.0);float haze=pow(1.0-abs(d.y),5.0);vec3 sky=mix(horizonColor,topColor,max(pow(max(h,0.0),exponent),0.0));sky=mix(sky,horizonColor,haze*0.3);sky+=sunColor*sun*1.35;gl_FragColor=vec4(sky,1.0);}",
       }),
     );
     scene.add(sky);
-    scene.add(new THREE.HemisphereLight(0xd9efff, 0x4f5b52, 2.2));
-    const sun = new THREE.DirectionalLight(0xfff1d9, 3.2);
-    sun.position.set(-8, 14, 8);
+    scene.add(new THREE.HemisphereLight(0xddeeff, 0x53664c, 1.65));
+    const sun = new THREE.DirectionalLight(0xffefd5, 3.65);
+    sun.position.set(-9, 15, 7);
     sun.castShadow = !lightweight;
     sun.shadow.mapSize.set(lightweight ? 512 : 1024, lightweight ? 512 : 1024);
     sun.shadow.camera.left = -12;
     sun.shadow.camera.right = 12;
     sun.shadow.camera.top = 16;
     sun.shadow.camera.bottom = -16;
+    sun.shadow.bias = -0.00035;
+    sun.shadow.normalBias = 0.035;
     scene.add(sun);
 
     const world = new THREE.Group();
     scene.add(world);
-    const grassMaterial = new THREE.MeshStandardMaterial({ color: 0x5f9d72, roughness: 0.96 });
-    const pathMaterial = new THREE.MeshStandardMaterial({ color: 0xd9c8aa, roughness: 0.94 });
+    const grassTexture = createGroundTexture("#719872", ["#486c51", "#91ab77", "#587c59", "#b0b883"], 9417);
+    const pathTexture = createGroundTexture("#c7b392", ["#9f896d", "#e2d2b5", "#b19b7b"], 2183);
+    if (grassTexture) {
+      grassTexture.repeat.set(9, 14);
+      grassTexture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+    }
+    if (pathTexture) {
+      pathTexture.repeat.set(3, 8);
+      pathTexture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+    }
+    const grassMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, map: grassTexture, roughness: 1 });
+    const pathMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, map: pathTexture, roughness: 0.96 });
     const walkableMeshes: THREE.Mesh[] = [];
     const bank = new THREE.Mesh(new THREE.BoxGeometry(28, 0.8, 39), grassMaterial);
     bank.position.set(0, -0.5, -7);
@@ -279,17 +426,70 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
       world.add(path);
       walkableMeshes.push(path);
     });
-    const streamMaterial = new THREE.MeshStandardMaterial({ color: 0x48aed1, roughness: 0.22, metalness: 0.05, transparent: true, opacity: 0.92 });
-    const stream = new THREE.Mesh(new THREE.BoxGeometry(19, 0.13, 4), streamMaterial);
-    stream.position.set(0, 0.02, -11.8);
+    const streamMaterial = new THREE.MeshPhysicalMaterial({ color: 0x62b8cb, roughness: 0.14, metalness: 0.02, transparent: true, opacity: 0.83, clearcoat: 0.72, clearcoatRoughness: 0.18, depthWrite: false });
+    const stream = new THREE.Mesh(new THREE.BoxGeometry(19, 0.12, 4), streamMaterial);
+    stream.position.set(0, 0.035, -11.8);
     world.add(stream);
+
+    const distantScenery = new THREE.Group();
+    const mountainMaterial = new THREE.MeshStandardMaterial({ color: 0x6f8580, roughness: 1, flatShading: true });
+    const distantMountainMaterial = new THREE.MeshStandardMaterial({ color: 0x91a2a1, roughness: 1, flatShading: true });
+    for (let index = 0; index < 11; index += 1) {
+      const distant = index % 2 === 0;
+      const mountain = new THREE.Mesh(new THREE.ConeGeometry(6 + (index % 3) * 1.4, 8 + (index % 4) * 1.5, 7), distant ? distantMountainMaterial : mountainMaterial);
+      mountain.position.set(-31 + index * 6.3, 2.6 + (index % 2) * 0.7, -48 - (distant ? 10 : 0));
+      mountain.rotation.y = index * 0.47;
+      distantScenery.add(mountain);
+    }
+    const cloudMaterial = new THREE.MeshBasicMaterial({ color: 0xf7f3ed, transparent: true, opacity: 0.52, depthWrite: false });
+    for (let index = 0; index < 7; index += 1) {
+      const cloud = new THREE.Mesh(new THREE.SphereGeometry(1.9 + (index % 2) * 0.7, 12, 8), cloudMaterial);
+      cloud.position.set(-18 + index * 6.4, 10 + (index % 3) * 1.1, -34 - (index % 2) * 9);
+      cloud.scale.set(1.8, 0.38, 0.7);
+      distantScenery.add(cloud);
+    }
+    world.add(distantScenery);
 
     for (let index = 0; index < 24; index += 1) {
       const z = 7 - index * 1.45;
       const side = index % 2 === 0 ? -1 : 1;
-      addTree(world, side * (7.2 + (index % 3) * 0.75), z, 0.72 + (index % 4) * 0.08, index % 3 === 0 ? 0xffc2d8 : 0xf39fc8);
-      if (index < 20) addFlower(world, -side * (3.2 + (index % 2) * 1.2), z - 0.6, index % 2 ? 0xffa8c8 : 0xbda5ff, 0.8 + (index % 3) * 0.1);
+      addTree(world, side * (7.2 + (index % 3) * 0.75), z, 0.72 + (index % 4) * 0.08, index % 3 === 0 ? 0xf4c7cf : 0xeab7c5);
+      if (index < 20) addFlower(world, -side * (3.2 + (index % 2) * 1.2), z - 0.6, index % 2 ? 0xe89ab3 : 0xb7a7d8, 0.8 + (index % 3) * 0.1);
     }
+
+    const grassTuftMaterial = new THREE.MeshStandardMaterial({ color: 0x3f6d49, roughness: 1, side: THREE.DoubleSide });
+    const grassTufts = new THREE.InstancedMesh(new THREE.ConeGeometry(0.055, 0.42, 4), grassTuftMaterial, lightweight ? 70 : 130);
+    const stoneInstances = new THREE.InstancedMesh(
+      new THREE.DodecahedronGeometry(0.16, 0),
+      new THREE.MeshStandardMaterial({ color: 0x817f78, roughness: 1 }),
+      lightweight ? 18 : 32,
+    );
+    const natureMatrix = new THREE.Matrix4();
+    const natureRotation = new THREE.Quaternion();
+    const natureScale = new THREE.Vector3();
+    const naturePosition = new THREE.Vector3();
+    for (let index = 0; index < grassTufts.count; index += 1) {
+      const side = index % 2 === 0 ? -1 : 1;
+      naturePosition.set(side * (3.6 + ((index * 17) % 54) / 10), 0.18, 7 - ((index * 29) % 360) / 10);
+      natureRotation.setFromAxisAngle(new THREE.Vector3(0, 1, 0), (index * 1.71) % Math.PI);
+      const size = 0.72 + (index % 5) * 0.1;
+      natureScale.set(size, size, size);
+      natureMatrix.compose(naturePosition, natureRotation, natureScale);
+      grassTufts.setMatrixAt(index, natureMatrix);
+    }
+    for (let index = 0; index < stoneInstances.count; index += 1) {
+      const side = index % 2 === 0 ? -1 : 1;
+      naturePosition.set(side * (4.6 + ((index * 13) % 47) / 10), 0.09, 6 - ((index * 31) % 350) / 10);
+      natureRotation.setFromAxisAngle(new THREE.Vector3(0, 1, 0), index * 0.73);
+      const size = 0.55 + (index % 4) * 0.16;
+      natureScale.set(size * 1.25, size * 0.68, size);
+      natureMatrix.compose(naturePosition, natureRotation, natureScale);
+      stoneInstances.setMatrixAt(index, natureMatrix);
+    }
+    grassTufts.receiveShadow = true;
+    stoneInstances.castShadow = !lightweight;
+    stoneInstances.receiveShadow = true;
+    world.add(grassTufts, stoneInstances);
     [-6.3, -16.5].forEach((z) => {
       addLantern(world, -2.7, z);
       addLantern(world, 2.7, z);
@@ -303,7 +503,8 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
       group.userData.chunkIndex = slot;
       group.userData.biomeIndex = slot % ENDLESS_BIOMES.length;
       group.position.z = -34 - slot * ENDLESS_CHUNK_LENGTH;
-      const terrainMaterial = new THREE.MeshStandardMaterial({ color: biome.grass, roughness: 0.96 });
+      const terrainTint = new THREE.Color(biome.grass).lerp(new THREE.Color(0xdce2d1), 0.22);
+      const terrainMaterial = new THREE.MeshStandardMaterial({ color: terrainTint, map: grassTexture, roughness: 1 });
       const terrain = new THREE.Mesh(new THREE.BoxGeometry(28, 0.8, ENDLESS_CHUNK_LENGTH + 0.35), terrainMaterial);
       terrain.position.y = -0.5;
       terrain.receiveShadow = true;
@@ -321,7 +522,7 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
       partyIsland.receiveShadow = true;
       group.add(partyIsland);
       walkableMeshes.push(partyIsland);
-      const accentMaterial = new THREE.MeshStandardMaterial({ color: biome.accent, emissive: biome.accent, emissiveIntensity: 0.18, roughness: 0.5 });
+      const accentMaterial = new THREE.MeshStandardMaterial({ color: biome.accent, emissive: biome.accent, emissiveIntensity: 0.1, roughness: 0.62 });
       const bouncePad = new THREE.Mesh(new THREE.CylinderGeometry(0.82, 0.96, 0.18, 18), accentMaterial);
       bouncePad.position.set(-bend * 2.25, 0.12, 2.2);
       bouncePad.userData.baseY = 0.12;
@@ -349,7 +550,7 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
     for (let slot = 0; slot < (lightweight ? 6 : 8); slot += 1) createEndlessChunk(slot);
 
     const gate = new THREE.Group();
-    const gateStone = new THREE.MeshStandardMaterial({ color: 0xe6cfe1, roughness: 0.66, metalness: 0.04 });
+    const gateStone = new THREE.MeshStandardMaterial({ color: 0xb8afa5, roughness: 0.96, metalness: 0 });
     const gateGlow = new THREE.MeshStandardMaterial({ color: 0xffa8d0, emissive: 0xff69aa, emissiveIntensity: 1.5, roughness: 0.35 });
     for (const x of [-2.1, 2.1]) {
       const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.47, 3.2, 8), gateStone);
@@ -379,7 +580,7 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
     }
 
     const beacon = new THREE.Group();
-    const beaconStone = new THREE.MeshStandardMaterial({ color: 0xe5d8ec, roughness: 0.62 });
+    const beaconStone = new THREE.MeshStandardMaterial({ color: 0xaaa7a0, roughness: 0.94 });
     const beaconGlow = new THREE.MeshStandardMaterial({ color: 0xffe48a, emissive: 0xffb63e, emissiveIntensity: 2.4, roughness: 0.28 });
     const pedestal = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 1.35, 0.75, 10), beaconStone);
     pedestal.position.y = 0.38;
@@ -513,8 +714,18 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
     window.addEventListener("blur", releaseKeys);
     renderer.domElement.addEventListener("pointerdown", onGroundClick);
 
-    const clock = new THREE.Clock();
+    const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const storySkyColor = new THREE.Color(0x8dbdd1);
+    const storyFogColor = new THREE.Color(0xc1ccd0);
+    const targetSkyColor = storySkyColor.clone();
+    const targetFogColor = storyFogColor.clone();
+    const targetAccentColor = new THREE.Color(0x8ff0d4);
     let frame = 0;
+    let previousFrameTime = performance.now();
+    let elapsedTime = 0;
+    let lastBiomeVisualIndex = -1;
+    let endlessVisibility = !liveRef.current.endlessMode;
+    let pageVisible = !document.hidden;
     let lastNearby: ExplorationEncounterId | null = null;
     let lastStatusDistance = -1;
     let lastStatusZone = -1;
@@ -523,6 +734,26 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
     const cameraTarget = new THREE.Vector3();
     const desiredCamera = new THREE.Vector3();
     const padWorldPosition = new THREE.Vector3();
+    const bichonRig = avatar.userData.rig as THREE.Group;
+    const bichonBody = avatar.userData.body as THREE.Mesh;
+    const bichonHead = avatar.userData.head as THREE.Mesh;
+    const bichonLegs = avatar.userData.legs as THREE.Mesh[];
+    const bichonTail = avatar.userData.tail as THREE.Group;
+    const bichonEars = avatar.userData.ears as THREE.Mesh[];
+    const bichonShadow = avatar.userData.shadow as THREE.Mesh;
+    const fireflyWings = lumi.userData.wings as THREE.Mesh[];
+
+    const onVisibilityChange = () => {
+      pageVisible = !document.hidden;
+      previousFrameTime = performance.now();
+      if (!pageVisible) releaseKeys();
+    };
+    const onContextLost = (event: Event) => {
+      event.preventDefault();
+      window.requestAnimationFrame(() => setFallback(true));
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    renderer.domElement.addEventListener("webglcontextlost", onContextLost);
 
     const resize = () => {
       const width = mount.clientWidth || window.innerWidth;
@@ -535,13 +766,16 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
     resizeObserver.observe(mount);
     resize();
 
-    const animate = () => {
+    const animate = (frameTime = performance.now()) => {
       frame = window.requestAnimationFrame(animate);
-      const delta = Math.min(0.035, clock.getDelta());
-      const time = clock.elapsedTime;
+      const delta = Math.min(0.035, Math.max(0.001, (frameTime - previousFrameTime) / 1000));
+      previousFrameTime = frameTime;
+      if (!pageVisible) return;
+      elapsedTime += delta;
+      const time = elapsedTime;
       const live = liveRef.current;
       const currentEncounter = getLiveEncounter(live);
-      const motionReduced = live.reducedMotion || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const motionReduced = live.reducedMotion || reducedMotionQuery.matches;
       const move = moveRef.current;
       let moving = false;
 
@@ -619,15 +853,33 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
         }
       }
 
-      const body = avatar.userData.body as THREE.Mesh;
-      const wand = avatar.userData.wand as THREE.Group;
-      body.rotation.z = moving && !motionReduced ? Math.sin(time * 12) * 0.05 : THREE.MathUtils.lerp(body.rotation.z, 0, 0.14);
-      wand.rotation.z = moving && !motionReduced ? Math.sin(time * 12 + 1) * 0.16 : Math.sin(time * 2) * 0.04;
-      if (grounded) avatar.position.y = 0.58 + (moving && !motionReduced ? Math.abs(Math.sin(time * 12)) * 0.025 : 0);
+      const animationAlpha = 1 - Math.exp(-delta * 11);
+      const gait = moving && !motionReduced ? Math.sin(time * 13.5) : 0;
+      const targetRigY = moving && !motionReduced ? Math.abs(gait) * 0.035 : Math.sin(time * 1.8) * 0.007;
+      bichonRig.position.y = THREE.MathUtils.lerp(bichonRig.position.y, targetRigY, animationAlpha);
+      bichonRig.rotation.z = THREE.MathUtils.lerp(bichonRig.rotation.z, moving && !motionReduced ? gait * 0.025 : 0, animationAlpha);
+      bichonBody.scale.y = THREE.MathUtils.lerp(bichonBody.scale.y, moving && !motionReduced ? 0.9 - Math.abs(gait) * 0.025 : 0.9 + Math.sin(time * 1.8) * 0.006, animationAlpha);
+      bichonHead.rotation.y = motionReduced ? 0 : Math.sin(time * (moving ? 2.6 : 1.15)) * (moving ? 0.025 : 0.06);
+      bichonLegs.forEach((leg, index) => {
+        const stride = gait * (index % 2 === 0 ? 1 : -1);
+        leg.rotation.x = THREE.MathUtils.lerp(leg.rotation.x, moving && !motionReduced ? stride * 0.5 : 0, animationAlpha);
+      });
+      bichonTail.rotation.z = 0.28 + (motionReduced ? 0 : Math.sin(time * (moving ? 13 : 5.2)) * (moving ? 0.32 : 0.18));
+      bichonEars.forEach((ear, index) => {
+        const restingAngle = index === 0 ? 0.2 : -0.2;
+        ear.rotation.z = restingAngle + (moving && !motionReduced ? gait * (index === 0 ? 0.08 : -0.08) : 0);
+      });
+      const jumpHeight = Math.max(0, avatar.position.y - 0.58);
+      bichonShadow.scale.setScalar(Math.max(0.62, 1 - jumpHeight * 0.2));
+      (bichonShadow.material as THREE.MeshBasicMaterial).opacity = Math.max(0.07, 0.2 - jumpHeight * 0.06);
 
-      lumi.position.x = THREE.MathUtils.lerp(lumi.position.x, avatar.position.x - 0.85, 0.055);
-      lumi.position.z = THREE.MathUtils.lerp(lumi.position.z, avatar.position.z + 0.75, 0.055);
+      const followAlpha = 1 - Math.exp(-delta * 5.4);
+      lumi.position.x = THREE.MathUtils.lerp(lumi.position.x, avatar.position.x - 0.75, followAlpha);
+      lumi.position.z = THREE.MathUtils.lerp(lumi.position.z, avatar.position.z + 0.62, followAlpha);
       lumi.position.y = 1.2 + (motionReduced ? 0 : Math.sin(time * 3.2) * 0.13);
+      fireflyWings.forEach((wing, index) => {
+        wing.rotation.y = (index === 0 ? -1 : 1) * (0.36 + Math.sin(time * 16) * 0.52);
+      });
 
       const distance = currentEncounter ? Math.hypot(avatar.position.x - currentEncounter.position.x, avatar.position.z - currentEncounter.position.z) : Infinity;
       const nextNearby = live.mode === "explore" && currentEncounter && distance < 2.35 ? currentEncounter.id : null;
@@ -646,26 +898,40 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
         lastCheckpointCount = completedCount;
       }
 
-      endlessChunks.forEach((chunk) => { chunk.visible = live.endlessMode; });
-      endlessPortal.visible = live.endlessMode;
+      if (endlessVisibility !== live.endlessMode) {
+        endlessVisibility = live.endlessMode;
+        endlessChunks.forEach((chunk) => { chunk.visible = endlessVisibility; });
+        endlessPortal.visible = endlessVisibility;
+      }
       if (live.endlessMode && currentEncounter) {
         const eventIndex = Math.floor(live.endlessWords / 5);
         const biome = getEndlessBiome(eventIndex);
+        if (eventIndex !== lastBiomeVisualIndex) {
+          lastBiomeVisualIndex = eventIndex;
+          targetAccentColor.set(biome.accent);
+          targetSkyColor.set(biome.sky);
+          targetFogColor.set(biome.fog);
+        }
         endlessPortal.position.set(currentEncounter.position.x, 0, currentEncounter.position.z);
         portalRing.rotation.z = time * 0.65;
         portalCore.rotation.x = time * 0.42;
         portalCore.rotation.y = time * 0.58;
-        portalGlowMaterial.color.lerp(new THREE.Color(biome.accent), 0.08);
-        portalGlowMaterial.emissive.lerp(new THREE.Color(biome.accent), 0.08);
-        const targetSky = new THREE.Color(biome.sky);
-        const targetFog = new THREE.Color(biome.fog);
-        (scene.background as THREE.Color).lerp(targetSky, 0.012);
-        (scene.fog as THREE.FogExp2).color.lerp(targetFog, 0.012);
-        let farthestZ = Math.min(...endlessChunks.map((chunk) => chunk.position.z));
+        const biomeBlend = 1 - Math.exp(-delta * 4.8);
+        portalGlowMaterial.color.lerp(targetAccentColor, biomeBlend);
+        portalGlowMaterial.emissive.lerp(targetAccentColor, biomeBlend);
+        (scene.background as THREE.Color).lerp(targetSkyColor, 1 - Math.exp(-delta * 0.75));
+        (scene.fog as THREE.FogExp2).color.lerp(targetFogColor, 1 - Math.exp(-delta * 0.75));
+        let farthestZ = Infinity;
+        let greatestChunkIndex = -Infinity;
+        endlessChunks.forEach((chunk) => {
+          farthestZ = Math.min(farthestZ, chunk.position.z);
+          greatestChunkIndex = Math.max(greatestChunkIndex, chunk.userData.chunkIndex as number);
+        });
         endlessChunks.forEach((chunk) => {
           if (chunk.position.z > avatar.position.z + ENDLESS_CHUNK_LENGTH * 2.3) {
             chunk.position.z = farthestZ - ENDLESS_CHUNK_LENGTH;
-            chunk.userData.chunkIndex = Math.max(...endlessChunks.map((item) => item.userData.chunkIndex as number)) + 1;
+            greatestChunkIndex += 1;
+            chunk.userData.chunkIndex = greatestChunkIndex;
             farthestZ = chunk.position.z;
           }
         });
@@ -678,8 +944,10 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
           live.onWorldStatus({ distance: distanceTravelled, zone, biome: biome.name, movingByClick: hasClickTarget });
         }
       } else {
-        (scene.background as THREE.Color).lerp(new THREE.Color(0x91c8e6), 0.012);
-        (scene.fog as THREE.FogExp2).color.lerp(new THREE.Color(0xa5b9d1), 0.012);
+        lastBiomeVisualIndex = -1;
+        const storyBlend = 1 - Math.exp(-delta * 0.75);
+        (scene.background as THREE.Color).lerp(storySkyColor, storyBlend);
+        (scene.fog as THREE.FogExp2).color.lerp(storyFogColor, storyBlend);
       }
 
       rune.rotation.z = time * 0.55;
@@ -691,7 +959,7 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
       bridgePieces.forEach((piece, index) => {
         const summoned = Math.max(0, Math.min(5, live.completedWords - 5)) > index;
         const targetScale = summoned ? 1 : 0.16;
-        piece.scale.y = THREE.MathUtils.lerp(piece.scale.y, targetScale, motionReduced ? 1 : 0.08);
+        piece.scale.y = THREE.MathUtils.lerp(piece.scale.y, targetScale, motionReduced ? 1 : 1 - Math.exp(-delta * 5));
         piece.position.y = summoned ? 0.25 + Math.sin(time * 1.8 + index) * 0.025 : -0.2;
       });
       beacon.rotation.y = motionReduced ? 0 : Math.sin(time * 0.35) * 0.08;
@@ -723,10 +991,10 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
         });
       }
 
-      const cameraDistance = mount.clientWidth < 700 ? 6.3 : 7.1;
-      desiredCamera.set(avatar.position.x * 0.34, avatar.position.y + 4.15, avatar.position.z + cameraDistance);
-      camera.position.lerp(desiredCamera, motionReduced ? 0.16 : 0.085);
-      cameraTarget.set(avatar.position.x, avatar.position.y + 0.9, avatar.position.z - 1.15);
+      const cameraDistance = mount.clientWidth < 700 ? 5.65 : 6.45;
+      desiredCamera.set(avatar.position.x * 0.28, avatar.position.y + 3.35, avatar.position.z + cameraDistance);
+      camera.position.lerp(desiredCamera, 1 - Math.exp(-delta * (motionReduced ? 12 : 6.2)));
+      cameraTarget.set(avatar.position.x, avatar.position.y + 0.52, avatar.position.z - 1.55);
       camera.lookAt(cameraTarget);
       renderer.render(scene, camera);
     };
@@ -737,7 +1005,9 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", releaseKeys);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       renderer.domElement.removeEventListener("pointerdown", onGroundClick);
+      renderer.domElement.removeEventListener("webglcontextlost", onContextLost);
       resizeObserver.disconnect();
       resetRef.current = null;
       disposeScene(scene);

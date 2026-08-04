@@ -5,15 +5,15 @@ import "./globals.css";
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
-const title = "安琪打字机｜四界大型打字冒险";
-const description = "穿越四大魔法世界与十二个剧情关卡，在单词、短句、竞速和守护者挑战中成长为花语打字大师。";
+const title = "安琪打字机｜比熊的星愿打字冒险";
+const description = "跟随安琪比熊探索实景动漫 3D 世界，在自然场景、机关奇遇和无限旅程中练习准确而快乐的打字。";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://key-quest-cn.gitluochao.chatgpt.site"),
   title,
   description,
-  openGraph: { title, description, type: "website", images: [{ url: "/og-v6.jpg", width: 1672, height: 941, alt: "安琪与月兔露米在星愿花园开启打字冒险" }] },
-  twitter: { card: "summary_large_image", title, description, images: ["/og-v6.jpg"] },
+  openGraph: { title, description, type: "website", images: [{ url: "/og-bichon-v1.png", width: 1672, height: 941, alt: "安琪比熊在实景动漫樱花谷开启星愿打字冒险" }] },
+  twitter: { card: "summary_large_image", title, description, images: ["/og-bichon-v1.png"] },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
