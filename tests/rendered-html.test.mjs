@@ -230,6 +230,9 @@ test("includes real WebGL, large-game systems, touch input, safety and persisten
   assert.match(css, /\.encounter-console/);
   assert.match(css, /\.endless-world-status/);
   assert.match(css, /\.endless-minimap/);
+  assert.match(css, /Readability baseline for a nine-year-old learner/);
+  assert.match(css, /\.magic-game small\{font-size:12px!important/);
+  assert.match(css, /\.hub-nav\{grid-template-columns:repeat\(3,1fr\)/);
   assert.match(layout, /og-bichon-v1\.png/);
   assert.match(layout, /summary_large_image/);
   assert.match(layout, /lang="zh-CN"/);

@@ -286,6 +286,46 @@ button:focus-visible,input:focus-visible { outline:3px solid var(--gold);outline
   .explore-objective-card,.explore-session-card>span,.explore-session-card button{backdrop-filter:blur(9px);box-shadow:0 9px 24px rgba(18,31,32,.16)}
 }
 
+/* Readability baseline for a nine-year-old learner. Decorative micro-copy is
+   kept compact, while every instruction, status and action remains legible. */
+.magic-game p{font-size:13px!important;line-height:1.6}
+.magic-game small{font-size:12px!important;line-height:1.4}
+.magic-game button{font-size:12px}
+.brand-lockup small{font-size:9px!important;line-height:1.2;letter-spacing:.18em}
+.brand-lockup strong{font-size:18px}
+.learner-pill{min-height:52px}
+.learner-pill small{font-size:11px!important}.learner-pill b{font-size:14px}.learner-pill em{font-size:12px!important}
+.profile-popover{width:min(380px,calc(100% - 24px))}.profile-popover>div:first-child strong{font-size:16px}.profile-list span strong{font-size:14px}.profile-popover form input,.profile-popover form button{font-size:12px}.profile-popover>p,.profile-privacy{font-size:11px!important;line-height:1.55}
+.mission-title small{font-size:10px!important}.mission-title strong{font-size:18px}
+.settings-popover>.backup-tools button,.reset-actions button,.parent-access b{font-size:11px!important}
+
+.season-chip{font-size:11px}.lobby-eyebrow{font-size:12px!important;line-height:1.4}.lobby-lead{font-size:clamp(14px,1.25vw,17px)!important;line-height:1.75}.play-button span{font-size:18px}.play-button i{font-size:11px}.story-button{font-size:13px}.promise-row{font-size:11px;line-height:1.45}
+.adventure-hub{grid-template-rows:64px 1fr}.hub-nav button{font-size:12px!important;gap:6px}.hub-nav button i{font-size:16px}.world-tabs button{min-height:66px}.world-tabs button small{font-size:10px!important}.world-tabs button strong{font-size:13px!important}.world-copy small{font-size:11px!important}.world-copy p{font-size:12px!important;line-height:1.5}.world-stat small{font-size:11px!important}.world-stat i{font-size:12px}.stage-node{min-height:166px;padding-top:14px}.stage-node small{height:auto;font-size:11px!important;line-height:1.4}.stage-node strong{font-size:14px!important;line-height:1.4}.stage-node em{font-size:12px!important;line-height:1.4}.stage-node>b{font-size:12px}.stage-stars i{font-size:12px!important}.selected-mission{min-height:62px}.selected-mission small{font-size:11px!important}.selected-mission strong{font-size:13px!important;line-height:1.4}.selected-mission button{min-height:42px;font-size:12px}.adventure-hub em{font-size:12px!important}.adventure-hub p{font-size:12px!important}.adventure-hub button{font-size:12px!important}
+.sanctuary-heading h3,.daily-heading h3,.collection-heading h3,.achievement-heading h3{font-size:20px}.sanctuary-growth p,.world-memories p,.daily-view p,.review-view p,.collection-view p,.achievements-view p{line-height:1.55}.world-memories strong,.sanctuary-decorations strong,.daily-bonus-grid strong,.achievement-grid strong{font-size:13px}
+.adventure-hub h4{font-size:16px;line-height:1.4}.review-hero h3,.daily-hero h3,.collection-heading h3{font-size:20px}.weak-key-list b{font-size:15px}.review-mission strong,.cosmetic-grid strong,.achievement-grid strong{font-size:14px}.review-mission em,.cosmetic-grid em{font-size:12px!important;line-height:1.5}.sanctuary-growth .recommendation-title{font-size:15px}.world-memories>span{min-height:105px}.daily-rewards span,.quest-rarity{font-size:12px}.cosmetic-grid button{min-height:180px}
+
+.quest-copy span,.quest-hud>small{font-size:11px!important;line-height:1.4}.quest-copy strong{font-size:16px}.session-hud small{font-size:11px!important}.session-hud b{font-size:20px}.combo-ribbon small{font-size:10px!important}.combo-ribbon span{font-size:11px}.mission-mechanic small{font-size:11px!important}.mission-mechanic strong{font-size:15px}.mission-mechanic>b{font-size:11px}.spell-label{font-size:11px}.spell-meta{font-size:12px;line-height:1.4}.spell-meta b{font-size:13px}.spell-meta kbd{font-size:12px}.finger-guide small{font-size:11px!important}.finger-guide strong{font-size:15px}.coach-key{font-size:10px}.desktop-hint,.mobile-type-box,.game-toast{font-size:12px}.word-burst{font-size:14px}.result-grid small,.result-grid em{font-size:11px!important}.result-grid strong{font-size:18px}.result-actions>button{font-size:13px}.tutorial-badge{font-size:11px}.tutorial-steps b{font-size:15px}.tutorial-card>p,.help-list p{font-size:13px!important}.help-list b{font-size:14px}
+.parent-report-heading>span,.report-label,.report-key-list b,.session-row,.parent-report-card footer>span{font-size:11px}.parent-metrics em,.parent-tip,.report-key-list p,.mastered-key-list p,.empty-report{font-size:12px!important}.parent-report-grid h3{font-size:17px}.session-row span small{font-size:10px!important}
+
+.explore-objective-card{width:min(350px,calc(100% - 36px));min-height:88px}.explore-objective-card small{font-size:11px!important}.explore-objective-card strong{font-size:17px}.explore-objective-card p{font-size:12px!important;line-height:1.45}.explore-route-progress small{font-size:10px!important}.endless-world-status small,.endless-world-status>em{font-size:11px!important}.endless-world-status strong{font-size:14px}.endless-world-status strong i{font-size:10px}.endless-minimap>small{font-size:10px!important}.explore-session-card small{font-size:11px!important}.interaction-prompt{min-height:74px}.interaction-prompt small{font-size:11px!important}.interaction-prompt strong{font-size:15px}.interaction-prompt button{font-size:12px}.explore-controls-hint span{font-size:11px}.explore-controls-hint kbd{font-size:10px}.world-atmosphere-badge{font-size:10px}.encounter-story{font-size:12px!important;line-height:1.55}.fallback-adventure-card p{font-size:13px!important}.fallback-adventure-card button{font-size:13px}
+
+@media (max-width:800px){
+  .profile-cluster{left:50%;top:9px;transform:translateX(-50%)}
+  .brand-lockup strong{font-size:15px}.brand-lockup small{font-size:8px!important}.learner-pill{min-height:43px}.learner-pill b{font-size:12px}.learner-pill small{font-size:11px!important}
+  .season-chip{font-size:10px}.lobby-eyebrow{font-size:10px!important}.lobby-lead{font-size:13px!important}.promise-row,.promise-row span{font-size:11px!important}.play-button span{font-size:16px}.play-button i{font-size:10px}
+  .adventure-hub{height:min(600px,calc(100dvh - 96px));grid-template-rows:90px 1fr}.hub-nav{grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(2,39px);overflow:visible}.hub-nav button{min-width:0;font-size:11px!important}.hub-nav button span{font-size:11px!important}.world-tabs button strong{font-size:12px!important}.world-overview{min-height:88px}.stage-node{min-height:150px}.stage-node small{font-size:11px!important}.stage-node strong{font-size:13px!important}.stage-node em{font-size:11px!important}
+  .quest-copy strong{font-size:13px}.combo-ribbon span{font-size:10px}.mission-mechanic strong{font-size:12px}.spell-meta{font-size:11px}.finger-guide strong{font-size:12px}.finger-guide small{font-size:10px!important}.coach-key{font-size:9px}.game-toast{font-size:11px}
+  .explore-objective-card{width:270px;min-height:78px}.explore-objective-card strong{font-size:14px}.explore-objective-card p{font-size:11px!important}.explore-route-progress small{font-size:9px!important}.interaction-prompt strong{font-size:13px}.mobile-action-pad button span{font-size:10px}
+}
+
+@media (max-width:360px){.learner-pill span,.learner-pill em{display:none}.learner-pill{padding:4px}.learner-pill>i{width:34px;height:34px}}
+
+@media (max-width:480px){
+  .lobby-copy h1{font-size:40px}.lobby-copy h2{font-size:22px}.lobby-lead{font-size:12px!important}.promise-row{font-size:9px}
+  .adventure-hub{height:535px}.hub-nav button{min-width:0}.world-tabs button strong{font-size:11px!important}.stage-route{grid-template-columns:repeat(3,minmax(118px,1fr));overflow-x:auto;padding-bottom:4px}.stage-node{min-height:148px}.selected-mission{align-items:center}.selected-mission strong{max-width:128px}
+  .explore-objective-card{width:225px}.explore-objective-card p{display:none}.explore-route-progress small{font-size:9px!important}.interaction-prompt small{font-size:10px!important}.interaction-prompt strong{font-size:12px}.encounter-story{display:none}
+}
+
 @media (prefers-reduced-motion:reduce) {
   *,*::before,*::after { animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important; }
 }
