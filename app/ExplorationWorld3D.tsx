@@ -15,6 +15,7 @@ import {
 } from "./exploration-engine";
 
 type ExplorationMode = "explore" | "encounter" | "paused" | "complete";
+type TypingFeedback = "correct" | "wrong" | "word" | null;
 
 type ExplorationWorld3DProps = {
   mode: ExplorationMode;
@@ -23,6 +24,7 @@ type ExplorationWorld3DProps = {
   endlessWords: number;
   reducedMotion: boolean;
   cosmeticColor: string;
+  feedback: TypingFeedback;
   onEncounter: (id: ExplorationEncounterId) => void;
   onCheckpoint: (message: string) => void;
   onWorldStatus: (status: ExplorationWorldStatus) => void;
@@ -32,6 +34,43 @@ export type ExplorationWorldStatus = { distance: number; zone: number; biome: st
 
 type LiveState = ExplorationWorld3DProps;
 type MoveKey = "forward" | "back" | "left" | "right" | "jump";
+
+function getStoryTerrainHeight(x: number, z: number) {
+  return 0.545 + Math.sin(x * 0.71 + (z + 9) * 0.34) * 0.025 + Math.sin((z + 9) * 1.23) * 0.012;
+}
+
+function createEncounterSign(title: string, subtitle: string, icon: string) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 768;
+  canvas.height = 384;
+  const context = canvas.getContext("2d");
+  if (!context) return null;
+  const gradient = context.createLinearGradient(0, 0, 768, 384);
+  gradient.addColorStop(0, "#4e4138");
+  gradient.addColorStop(1, "#282c2a");
+  context.fillStyle = gradient;
+  context.roundRect(16, 16, 736, 352, 34);
+  context.fill();
+  context.strokeStyle = "rgba(238,218,174,.92)";
+  context.lineWidth = 11;
+  context.stroke();
+  context.fillStyle = "#ffe7a5";
+  context.font = "700 86px sans-serif";
+  context.fillText(icon, 66, 154);
+  context.fillStyle = "#fff8e8";
+  context.font = "800 66px sans-serif";
+  context.fillText(title, 176, 142);
+  context.fillStyle = "#d7e5d3";
+  context.font = "600 32px sans-serif";
+  context.fillText(subtitle, 176, 205);
+  context.fillStyle = "#ffd98b";
+  context.font = "700 27px sans-serif";
+  context.fillText("靠近机关 · 打字点亮 5 枚花印", 176, 272);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 4;
+  return texture;
+}
 
 function getLiveEncounter(live: LiveState) {
   return live.endlessMode ? getEndlessEncounter(live.endlessWords) : getExplorationEncounter(live.completedWords);
@@ -180,12 +219,32 @@ function addTree(parent: THREE.Object3D, x: number, z: number, scale: number, co
     crown.position.set(px, py, pz);
     crown.scale.set(1.12 + (index % 2) * 0.12, 0.7 + (index % 3) * 0.08, 0.92 + (index % 2) * 0.08);
     crown.rotation.set(index * 0.31, index * 0.77, index * 0.19);
+    crown.userData.baseRotationZ = crown.rotation.z;
     crown.castShadow = true;
     tree.add(crown);
   });
   tree.position.set(x, 0, z);
   tree.scale.setScalar(scale);
+  tree.userData.crowns = tree.children.filter((child) => child instanceof THREE.Mesh).slice(4);
   parent.add(tree);
+  return tree;
+}
+
+function addShrub(parent: THREE.Object3D, x: number, z: number, scale: number, tint = 0x527258) {
+  const shrub = new THREE.Group();
+  const leaf = new THREE.MeshStandardMaterial({ color: tint, roughness: 0.98 });
+  [[0, 0.26, 0], [-0.22, 0.2, 0.03], [0.21, 0.18, -0.03], [0.05, 0.18, 0.2]].forEach(([px, py, pz], index) => {
+    const clump = new THREE.Mesh(new THREE.IcosahedronGeometry(index === 0 ? 0.31 : 0.24, 1), leaf);
+    clump.position.set(px, py, pz);
+    clump.scale.set(1.15, 0.72, 1);
+    clump.rotation.y = index * 0.9;
+    clump.castShadow = true;
+    shrub.add(clump);
+  });
+  shrub.position.set(x, 0, z);
+  shrub.scale.setScalar(scale);
+  parent.add(shrub);
+  return shrub;
 }
 
 function addLantern(parent: THREE.Object3D, x: number, z: number) {
@@ -325,6 +384,8 @@ function makeAvatar(color: string) {
   avatar.userData.legs = legs;
   avatar.userData.tail = tail;
   avatar.userData.ears = ears;
+  avatar.userData.eyes = eyes;
+  avatar.userData.bow = bow;
   avatar.userData.shadow = contactShadow;
   return avatar;
 }
@@ -355,12 +416,20 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
   const resetRef = useRef<(() => void) | null>(null);
   const previousWordsRef = useRef(props.completedWords);
   const previousEndlessModeRef = useRef(props.endlessMode);
+  const reactionRef = useRef<{ kind: Exclude<TypingFeedback, null>; startedAt: number; duration: number } | null>(null);
   const nearbyRef = useRef<ExplorationEncounterId | null>(null);
   const [nearby, setNearby] = useState<ExplorationEncounterId | null>(null);
   const [fallback, setFallback] = useState(false);
 
   useEffect(() => {
     liveRef.current = props;
+    if (props.feedback) {
+      reactionRef.current = {
+        kind: props.feedback,
+        startedAt: performance.now(),
+        duration: props.feedback === "word" ? 920 : props.feedback === "wrong" ? 460 : 360,
+      };
+    }
     if (props.completedWords < previousWordsRef.current || (props.endlessMode && !previousEndlessModeRef.current)) resetRef.current?.();
     previousWordsRef.current = props.completedWords;
     previousEndlessModeRef.current = props.endlessMode;
@@ -395,7 +464,9 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
     }
 
     const pixelRatioCap = lightweight ? 1.08 : compactViewport ? 1.35 : 1.55;
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, pixelRatioCap));
+    const nativePixelRatio = Math.min(window.devicePixelRatio, pixelRatioCap);
+    let qualityScale = 1;
+    renderer.setPixelRatio(nativePixelRatio * qualityScale);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.05;
@@ -420,7 +491,8 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
     sky.rotation.y = Math.PI * 0.48;
     sky.frustumCulled = false;
     scene.add(sky);
-    scene.add(new THREE.HemisphereLight(0xddeeff, 0x53664c, 1.65));
+    const hemisphere = new THREE.HemisphereLight(0xddeeff, 0x53664c, 1.65);
+    scene.add(hemisphere);
     const sun = new THREE.DirectionalLight(0xffefd5, 3.65);
     sun.position.set(-9, 15, 7);
     sun.castShadow = !lightweight;
@@ -483,12 +555,30 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
     stream.position.set(0, 0.072, -11.8);
     world.add(stream);
 
+    const windCrowns: THREE.Object3D[] = [];
+    const storyObstacles: Array<{ x: number; z: number; radius: number }> = [];
     for (let index = 0; index < 24; index += 1) {
       const z = 7 - index * 1.45;
       const side = index % 2 === 0 ? -1 : 1;
-      addTree(world, side * (7.2 + (index % 3) * 0.75), z, 0.72 + (index % 4) * 0.08, index % 3 === 0 ? 0xf4c7cf : 0xeab7c5);
+      const treeX = side * (7.2 + (index % 3) * 0.75);
+      const tree = addTree(world, treeX, z, 0.72 + (index % 4) * 0.08, index % 3 === 0 ? 0xf4c7cf : 0xeab7c5);
+      windCrowns.push(...(tree.userData.crowns as THREE.Object3D[]));
+      storyObstacles.push({ x: treeX, z, radius: 0.72 });
       if (index < 20) addFlower(world, -side * (3.2 + (index % 2) * 1.2), z - 0.6, index % 2 ? 0xe89ab3 : 0xb7a7d8, 0.8 + (index % 3) * 0.1);
+      if (index % 3 === 0) addShrub(world, -side * (5.2 + (index % 2) * 0.8), z + 0.35, 0.74 + (index % 4) * 0.08, index % 2 ? 0x4e7655 : 0x5f7e58);
     }
+
+    const fallenLogMaterial = new THREE.MeshStandardMaterial({ color: 0x665145, roughness: 1, bumpMap: pathTexture, bumpScale: 0.035 });
+    [[-5.9, -3.8, 0.18], [6.2, -19.5, -0.22]].forEach(([x, z, angle]) => {
+      const log = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.25, 2.2, 10), fallenLogMaterial);
+      log.position.set(x, 0.22, z);
+      log.rotation.set(Math.PI / 2, 0, angle);
+      log.castShadow = true;
+      log.receiveShadow = true;
+      world.add(log);
+      addShrub(world, x + 0.8, z + 0.18, 0.72);
+      storyObstacles.push({ x, z, radius: 1.08 });
+    });
 
     const grassTuftMaterial = new THREE.MeshStandardMaterial({ color: 0x3f6d49, roughness: 1, side: THREE.DoubleSide });
     const grassTufts = new THREE.InstancedMesh(new THREE.ConeGeometry(0.055, 0.42, 4), grassTuftMaterial, lightweight ? 70 : 130);
@@ -523,6 +613,7 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
     stoneInstances.castShadow = !lightweight;
     stoneInstances.receiveShadow = true;
     world.add(grassTufts, stoneInstances);
+    grassTufts.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     [-6.3, -16.5].forEach((z) => {
       addLantern(world, -2.7, z);
       addLantern(world, 2.7, z);
@@ -619,6 +710,7 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
     rune.position.set(0, 1.74, -2.34);
     gate.add(rune);
     world.add(gate);
+    storyObstacles.push({ x: -2.1, z: -2.4, radius: 0.72 }, { x: 2.1, z: -2.4, radius: 0.72 });
 
     const bridgePieces: THREE.Mesh[] = [];
     for (let index = 0; index < 5; index += 1) {
@@ -683,8 +775,66 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
       world.add(marker);
     });
 
+    const signTextures: THREE.CanvasTexture[] = [];
+    const encounterSigns: THREE.Group[] = [];
+    const encounterProgressOrbs: THREE.Mesh[][] = [];
+    EXPLORATION_ENCOUNTERS.forEach((encounter, encounterIndex) => {
+      const sign = new THREE.Group();
+      const texture = createEncounterSign(encounter.title, encounter.subtitle, encounter.icon);
+      if (texture) signTextures.push(texture);
+      const board = new THREE.Mesh(
+        new THREE.PlaneGeometry(3.4, 1.7),
+        new THREE.MeshStandardMaterial({ map: texture, color: 0xffffff, roughness: 0.76, emissive: 0x2d241d, emissiveIntensity: 0.16 }),
+      );
+      board.position.y = 1.58;
+      board.castShadow = true;
+      sign.add(board);
+      const postMaterial = new THREE.MeshStandardMaterial({ color: 0x725744, roughness: 1 });
+      for (const x of [-1.28, 1.28]) {
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.105, 1.75, 8), postMaterial);
+        post.position.set(x, 0.78, -0.04);
+        post.castShadow = true;
+        sign.add(post);
+      }
+      sign.position.set(encounterIndex % 2 === 0 ? 4.45 : -4.45, 0, encounter.position.z + 0.45);
+      sign.rotation.y = encounterIndex % 2 === 0 ? -0.16 : 0.16;
+      encounterSigns.push(sign);
+      world.add(sign);
+
+      const progressOrbs: THREE.Mesh[] = [];
+      for (let index = 0; index < 5; index += 1) {
+        const orbMaterial = new THREE.MeshStandardMaterial({ color: 0x676e69, emissive: 0x1f2622, emissiveIntensity: 0.12, roughness: 0.48 });
+        const orb = new THREE.Mesh(new THREE.IcosahedronGeometry(0.13, 1), orbMaterial);
+        orb.position.set((index - 2) * 0.42, 0.32, encounter.position.z + 1.55);
+        orb.castShadow = true;
+        progressOrbs.push(orb);
+        world.add(orb);
+      }
+      encounterProgressOrbs.push(progressOrbs);
+    });
+
+    const endlessProgressOrbs: THREE.Mesh[] = [];
+    for (let index = 0; index < 5; index += 1) {
+      const material = new THREE.MeshStandardMaterial({ color: 0x55746d, emissive: 0x24584f, emissiveIntensity: 0.25, roughness: 0.4 });
+      const orb = new THREE.Mesh(new THREE.IcosahedronGeometry(0.13, 1), material);
+      orb.position.set((index - 2) * 0.42, 0.15, 1.48);
+      endlessProgressOrbs.push(orb);
+      endlessPortal.add(orb);
+    }
+
     const avatar = makeAvatar(liveRef.current.cosmeticColor);
     scene.add(avatar);
+    const reactionBurst = new THREE.Group();
+    const reactionBurstMaterial = new THREE.MeshBasicMaterial({ color: 0xffe28c, transparent: true, opacity: 0.95, depthWrite: false });
+    for (let index = 0; index < 10; index += 1) {
+      const sparkle = new THREE.Mesh(new THREE.OctahedronGeometry(0.075 + (index % 3) * 0.014, 0), reactionBurstMaterial);
+      const angle = (index / 10) * Math.PI * 2;
+      sparkle.position.set(Math.cos(angle) * 0.72, 0.46 + Math.sin(index * 1.7) * 0.22, Math.sin(angle) * 0.36);
+      sparkle.userData.angle = angle;
+      reactionBurst.add(sparkle);
+    }
+    reactionBurst.visible = false;
+    avatar.add(reactionBurst);
     const lumi = makeCompanion();
     scene.add(lumi);
     const spawn = liveRef.current.endlessMode ? { x: 0, y: 0.58, z: -26.2 } : getExplorationCheckpoint(liveRef.current.completedWords);
@@ -723,6 +873,19 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
       petals.push(petal);
       scene.add(petal);
     }
+    const atmospherePositions = new Float32Array((lightweight ? 34 : 72) * 3);
+    for (let index = 0; index < atmospherePositions.length; index += 3) {
+      atmospherePositions[index] = (Math.random() - 0.5) * 18;
+      atmospherePositions[index + 1] = 0.6 + Math.random() * 5.8;
+      atmospherePositions[index + 2] = 7 - Math.random() * 38;
+    }
+    const atmosphereGeometry = new THREE.BufferGeometry();
+    atmosphereGeometry.setAttribute("position", new THREE.BufferAttribute(atmospherePositions, 3));
+    const atmosphereMotes = new THREE.Points(
+      atmosphereGeometry,
+      new THREE.PointsMaterial({ color: 0xffe6a8, size: 0.055, transparent: true, opacity: 0.5, depthWrite: false, sizeAttenuation: true }),
+    );
+    scene.add(atmosphereMotes);
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (liveRef.current.mode !== "explore" || event.metaKey || event.ctrlKey || event.altKey) return;
@@ -748,9 +911,9 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
       raycaster.setFromCamera(pointer, camera);
       const intersection = raycaster.intersectObjects(walkableMeshes, false).find((hit) => hit.point.y > -0.2);
       if (!intersection) return;
-      clickTarget.set(Math.max(-10.5, Math.min(10.5, intersection.point.x)), 0.58, intersection.point.z);
+      clickTarget.set(Math.max(-10.5, Math.min(10.5, intersection.point.x)), intersection.point.y + 0.58, intersection.point.z);
       hasClickTarget = true;
-      destinationMarker.position.set(clickTarget.x, 0.12, clickTarget.z);
+      destinationMarker.position.set(clickTarget.x, intersection.point.y + 0.12, clickTarget.z);
       destinationMarker.visible = true;
       liveRef.current.onWorldStatus({
         distance: Math.max(0, Math.floor(-avatar.position.z - 24)),
@@ -782,6 +945,8 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
     let lastStatusZone = -1;
     let lastClickStatus = false;
     let lastBounceAt = -10;
+    let performanceSampleTime = 0;
+    let performanceSampleFrames = 0;
     const cameraTarget = new THREE.Vector3();
     const desiredCamera = new THREE.Vector3();
     const padWorldPosition = new THREE.Vector3();
@@ -791,8 +956,14 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
     const bichonLegs = avatar.userData.legs as THREE.Mesh[];
     const bichonTail = avatar.userData.tail as THREE.Group;
     const bichonEars = avatar.userData.ears as THREE.Mesh[];
+    const bichonEyes = avatar.userData.eyes as THREE.Mesh[];
+    const bichonBow = avatar.userData.bow as THREE.Group;
     const bichonShadow = avatar.userData.shadow as THREE.Mesh;
     const fireflyWings = lumi.userData.wings as THREE.Mesh[];
+    const isStoryPositionBlocked = (x: number, z: number) => {
+      if (z < -9.7 && z > -13.75 && Math.abs(x) > 1.72) return true;
+      return storyObstacles.some((obstacle) => Math.hypot(x - obstacle.x, z - obstacle.z) < obstacle.radius + 0.42);
+    };
 
     const onVisibilityChange = () => {
       pageVisible = !document.hidden;
@@ -829,6 +1000,7 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
       const motionReduced = live.reducedMotion || reducedMotionQuery.matches;
       const move = moveRef.current;
       let moving = false;
+      const groundHeight = live.endlessMode ? 0.58 : getStoryTerrainHeight(avatar.position.x, avatar.position.z);
 
       if (live.mode === "explore") {
         let inputX = (move.right ? 1 : 0) - (move.left ? 1 : 0);
@@ -866,8 +1038,17 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
         }
         moving = Math.abs(inputX) + Math.abs(inputZ) > 0;
         if (moving) {
-          avatar.position.x = nextX;
-          avatar.position.z = nextZ;
+          if (live.endlessMode || !isStoryPositionBlocked(nextX, nextZ)) {
+            avatar.position.x = nextX;
+            avatar.position.z = nextZ;
+          } else if (!isStoryPositionBlocked(nextX, avatar.position.z)) {
+            avatar.position.x = nextX;
+          } else if (!isStoryPositionBlocked(avatar.position.x, nextZ)) {
+            avatar.position.z = nextZ;
+          } else if (hasClickTarget) {
+            hasClickTarget = false;
+            destinationMarker.visible = false;
+          }
           const targetYaw = Math.atan2(inputX, inputZ);
           avatar.rotation.y += Math.atan2(Math.sin(targetYaw - avatar.rotation.y), Math.cos(targetYaw - avatar.rotation.y)) * Math.min(1, delta * 11);
         }
@@ -897,29 +1078,53 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
       if (!grounded) {
         verticalVelocity -= 13.5 * delta;
         avatar.position.y += verticalVelocity * delta;
-        if (avatar.position.y <= 0.58) {
-          avatar.position.y = 0.58;
+        const landingHeight = live.endlessMode ? 0.58 : getStoryTerrainHeight(avatar.position.x, avatar.position.z);
+        if (avatar.position.y <= landingHeight) {
+          avatar.position.y = landingHeight;
           verticalVelocity = 0;
           grounded = true;
         }
+      } else {
+        avatar.position.y = THREE.MathUtils.lerp(avatar.position.y, groundHeight, 1 - Math.exp(-delta * 14));
       }
 
       const animationAlpha = 1 - Math.exp(-delta * 11);
       const gait = moving && !motionReduced ? Math.sin(time * 13.5) : 0;
-      const targetRigY = moving && !motionReduced ? Math.abs(gait) * 0.035 : Math.sin(time * 1.8) * 0.007;
+      const reaction = reactionRef.current;
+      const reactionProgress = reaction ? (frameTime - reaction.startedAt) / reaction.duration : 2;
+      const reactionActive = Boolean(reaction && reactionProgress >= 0 && reactionProgress <= 1);
+      if (reaction && reactionProgress > 1) reactionRef.current = null;
+      const positiveReaction = reactionActive && reaction?.kind !== "wrong";
+      const wrongReaction = reactionActive && reaction?.kind === "wrong";
+      const celebration = positiveReaction ? Math.sin(Math.min(1, reactionProgress) * Math.PI) : 0;
+      const comfort = wrongReaction ? Math.sin(Math.min(1, reactionProgress) * Math.PI) : 0;
+      const targetRigY = (moving && !motionReduced ? Math.abs(gait) * 0.035 : Math.sin(time * 1.8) * 0.007) + celebration * (reaction?.kind === "word" ? 0.28 : 0.13) - comfort * 0.035;
       bichonRig.position.y = THREE.MathUtils.lerp(bichonRig.position.y, targetRigY, animationAlpha);
-      bichonRig.rotation.z = THREE.MathUtils.lerp(bichonRig.rotation.z, moving && !motionReduced ? gait * 0.025 : 0, animationAlpha);
+      bichonRig.rotation.z = THREE.MathUtils.lerp(bichonRig.rotation.z, moving && !motionReduced ? gait * 0.025 : comfort * 0.07, animationAlpha);
       bichonBody.scale.y = THREE.MathUtils.lerp(bichonBody.scale.y, moving && !motionReduced ? 0.9 - Math.abs(gait) * 0.025 : 0.9 + Math.sin(time * 1.8) * 0.006, animationAlpha);
       bichonHead.rotation.y = motionReduced ? 0 : Math.sin(time * (moving ? 2.6 : 1.15)) * (moving ? 0.025 : 0.06);
+      bichonHead.rotation.x = THREE.MathUtils.lerp(bichonHead.rotation.x, celebration * -0.12 + comfort * 0.16, animationAlpha);
       bichonLegs.forEach((leg, index) => {
         const stride = gait * (index % 2 === 0 ? 1 : -1);
         leg.rotation.x = THREE.MathUtils.lerp(leg.rotation.x, moving && !motionReduced ? stride * 0.5 : 0, animationAlpha);
       });
-      bichonTail.rotation.z = 0.28 + (motionReduced ? 0 : Math.sin(time * (moving ? 13 : 5.2)) * (moving ? 0.32 : 0.18));
+      bichonTail.rotation.z = 0.28 + (motionReduced ? 0 : Math.sin(time * (positiveReaction ? 22 : moving ? 13 : 5.2)) * (positiveReaction ? 0.46 : moving ? 0.32 : 0.18));
       bichonEars.forEach((ear, index) => {
         const restingAngle = index === 0 ? 0.2 : -0.2;
-        ear.rotation.z = restingAngle + (moving && !motionReduced ? gait * (index === 0 ? 0.08 : -0.08) : 0);
+        const comfortDroop = comfort * (index === 0 ? -0.22 : 0.22);
+        ear.rotation.z = restingAngle + comfortDroop + (moving && !motionReduced ? gait * (index === 0 ? 0.08 : -0.08) : 0);
       });
+      const blinkCycle = time % 4.6;
+      const blinkScale = blinkCycle > 4.47 ? 0.16 : 1;
+      bichonEyes.forEach((eye) => { eye.scale.y = THREE.MathUtils.lerp(eye.scale.y, positiveReaction ? 0.58 : blinkScale * 1.08, animationAlpha); });
+      bichonBow.rotation.z = motionReduced ? 0 : Math.sin(time * (positiveReaction ? 15 : 2.3)) * (positiveReaction ? 0.12 : 0.025);
+      reactionBurst.visible = positiveReaction && !motionReduced;
+      if (reactionBurst.visible) {
+        reactionBurst.rotation.y = time * 1.8;
+        reactionBurst.scale.setScalar(0.55 + celebration * 0.82);
+        reactionBurstMaterial.opacity = Math.max(0, 1 - reactionProgress);
+        reactionBurst.children.forEach((sparkle, index) => { sparkle.rotation.y = time * 3 + index; });
+      }
       const jumpHeight = Math.max(0, avatar.position.y - 0.58);
       bichonShadow.scale.setScalar(Math.max(0.62, 1 - jumpHeight * 0.2));
       (bichonShadow.material as THREE.MeshBasicMaterial).opacity = Math.max(0.07, 0.2 - jumpHeight * 0.06);
@@ -964,6 +1169,15 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
           targetFogColor.set(biome.fog);
         }
         endlessPortal.position.set(currentEncounter.position.x, 0, currentEncounter.position.z);
+        encounterSigns.forEach((sign) => { sign.visible = false; });
+        const endlessProgress = live.endlessWords % 5;
+        endlessProgressOrbs.forEach((orb, index) => {
+          const material = orb.material as THREE.MeshStandardMaterial;
+          const active = index < endlessProgress;
+          material.color.set(active ? 0xa9ffe8 : 0x55746d);
+          material.emissive.set(active ? 0x62f0cf : 0x24584f);
+          material.emissiveIntensity = active ? 2.2 : 0.25;
+        });
         portalRing.rotation.z = time * 0.65;
         portalCore.rotation.x = time * 0.42;
         portalCore.rotation.y = time * 0.58;
@@ -999,7 +1213,22 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
         const storyBlend = 1 - Math.exp(-delta * 0.75);
         (scene.background as THREE.Color).lerp(storySkyColor, storyBlend);
         (scene.fog as THREE.FogExp2).color.lerp(storyFogColor, storyBlend);
+        encounterSigns.forEach((sign) => { sign.visible = true; });
       }
+
+      encounterProgressOrbs.forEach((orbs, encounterIndex) => {
+        const encounter = EXPLORATION_ENCOUNTERS[encounterIndex];
+        const localProgress = Math.max(0, Math.min(5, live.completedWords - encounter.start));
+        orbs.forEach((orb, index) => {
+          const material = orb.material as THREE.MeshStandardMaterial;
+          const active = index < localProgress;
+          material.color.set(active ? 0xffe49a : 0x676e69);
+          material.emissive.set(active ? 0xffb942 : 0x1f2622);
+          material.emissiveIntensity = active ? 2.1 : 0.12;
+          orb.position.y = 0.32 + (active && !motionReduced ? Math.sin(time * 3.2 + index) * 0.035 : 0);
+          orb.rotation.y = time * 0.55 + index;
+        });
+      });
 
       rune.rotation.z = time * 0.55;
       rune.scale.setScalar(live.completedWords >= 5 ? 1 + Math.sin(time * 2) * 0.04 : 0.96);
@@ -1038,6 +1267,31 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
           petal.rotation.z += delta * 0.45;
           if (petal.position.y < 0.25) petal.position.y = 5.5 + (index % 4);
         });
+        windCrowns.forEach((crown, index) => {
+          crown.rotation.z = (crown.userData.baseRotationZ as number) + Math.sin(time * 0.72 + index * 0.41) * 0.018;
+        });
+        atmosphereMotes.rotation.y = time * 0.014;
+        atmosphereMotes.position.x = Math.sin(time * 0.18) * 0.42;
+      }
+
+      const daylight = 0.5 + Math.sin(time * 0.035) * 0.5;
+      sun.intensity = 3.35 + daylight * 0.48;
+      hemisphere.intensity = 1.52 + daylight * 0.2;
+      renderer.toneMappingExposure = 1.01 + daylight * 0.07;
+      (scene.fog as THREE.FogExp2).density = 0.0165 + (1 - daylight) * 0.0018;
+
+      performanceSampleTime += delta;
+      performanceSampleFrames += 1;
+      if (performanceSampleTime >= 4) {
+        const averageFrame = performanceSampleTime / performanceSampleFrames;
+        const nextQuality = averageFrame > 0.024 ? Math.max(0.68, qualityScale - 0.12) : averageFrame < 0.0175 ? Math.min(1, qualityScale + 0.06) : qualityScale;
+        if (Math.abs(nextQuality - qualityScale) > 0.01) {
+          qualityScale = nextQuality;
+          renderer.setPixelRatio(nativePixelRatio * qualityScale);
+          resize();
+        }
+        performanceSampleTime = 0;
+        performanceSampleFrames = 0;
       }
 
       const cameraDistance = mount.clientWidth < 700 ? 5.65 : 6.45;
@@ -1064,6 +1318,7 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
       skyTexture.dispose();
       grassTexture?.dispose();
       pathTexture?.dispose();
+      signTextures.forEach((texture) => texture.dispose());
       renderer.dispose();
       renderer.domElement.remove();
     };
@@ -1098,6 +1353,7 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
       <div ref={mountRef} className="exploration-canvas" aria-hidden="true" />
       {props.mode === "explore" && (
         <>
+          <div className="world-atmosphere-badge"><i />实景光照 · 樱花微风</div>
           <div className={`interaction-prompt ${nearbyEncounter ? "visible" : ""}`} aria-live="polite">
             <span>{nearbyEncounter?.icon ?? "⌁"}</span>
             <div><small>{nearbyEncounter ? props.endlessMode ? `发现随机奇遇 · 第 ${nearbyEncounter.number} 区` : `发现机关 · 第 ${nearbyEncounter.number}/3 站` : props.endlessMode ? "点击远处路面，安琪会自动前往" : "沿花瓣小路探索"}</small><strong>{nearbyEncounter?.title ?? (props.endlessMode ? "寻找下一座星愿碑" : "寻找发光的花印")}</strong></div>

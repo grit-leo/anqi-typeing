@@ -89,6 +89,7 @@ test("includes real WebGL, large-game systems, touch input, safety and persisten
   assert.match(page, /highContrast/);
   assert.match(page, /lazy\(\(\) => import\("\.\/MagicGarden3D"\)/);
   assert.match(page, /lazy\(\(\) => import\("\.\/ExplorationWorld3D"\)/);
+  assert.match(page, /feedback=\{flash\}/);
   assert.match(page, /phase === "exploring"/);
   assert.match(page, /beginExplorationEncounter/);
   assert.match(page, /isExplorationBoundary/);
@@ -179,7 +180,15 @@ test("includes real WebGL, large-game systems, touch input, safety and persisten
   assert.match(exploration, /bouncePads/);
   assert.match(exploration, /0xfffbf2/);
   assert.match(exploration, /bichonTail/);
+  assert.match(exploration, /reactionBurst/);
+  assert.match(exploration, /bichonEyes/);
   assert.match(exploration, /createGroundTexture/);
+  assert.match(exploration, /createEncounterSign/);
+  assert.match(exploration, /encounterProgressOrbs/);
+  assert.match(exploration, /getStoryTerrainHeight/);
+  assert.match(exploration, /isStoryPositionBlocked/);
+  assert.match(exploration, /atmosphereMotes/);
+  assert.match(exploration, /qualityScale/);
   assert.match(exploration, /Math\.exp\(-delta/);
   assert.match(explorationEngine, /rune-gate/);
   assert.match(explorationEngine, /moon-bridge/);

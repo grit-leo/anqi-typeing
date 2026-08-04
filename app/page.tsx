@@ -810,6 +810,7 @@ export default function Home() {
               endlessWords={endlessWords}
               reducedMotion={reducedMotion}
               cosmeticColor={equippedCosmetic.color}
+              feedback={flash}
               onEncounter={beginExplorationEncounter}
               onCheckpoint={showToast}
               onWorldStatus={setWorldStatus}
