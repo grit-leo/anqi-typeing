@@ -18,15 +18,22 @@ import {
   getLessonAct,
   getLevelMastery,
   getGuardianState,
+  getLearningRecommendation,
+  getLumiBond,
   getMissionDuration,
   getLiveScore,
   getPlayerLevel,
   getPlayerLevelProgress,
+  getSanctuaryLevel,
+  getSessionSupport,
   getSuggestedReviewLevel,
+  getUnlockedDecorations,
   getWeakKeys,
   mergeKeyMastery,
   migrateGardenProgress,
+  LEVEL_MECHANICS,
   MISSION_RULES,
+  SANCTUARY_DECORATIONS,
 } from "../app/game-engine.ts";
 
 test("large adventure ships four worlds, twelve progressive levels, and four mission types", () => {
@@ -58,8 +65,8 @@ test("word selection loops and typing input supports letters, phrases, and contr
 test("lesson acts and key mastery turn practice into measurable learning", () => {
   const first = GARDEN_LEVELS[0];
   assert.equal(getLessonAct(first, 0), "learn");
-  assert.equal(getLessonAct(first, 3), "practice");
-  assert.equal(getLessonAct(first, 7), "adventure");
+  assert.equal(getLessonAct(first, 5), "practice");
+  assert.equal(getLessonAct(first, 11), "adventure");
   const mastery = mergeKeyMastery({}, {
     f: { attempts: 8, correct: 8, bestStreak: 8 },
     j: { attempts: 8, correct: 7, bestStreak: 5 },
@@ -90,7 +97,7 @@ test("missions score differently and results reward accuracy, completion, combo,
 
 test("every mission has a distinct rule and guardian phase", () => {
   assert.equal(MISSION_RULES.bloom.untimed, true);
-  assert.equal(MISSION_RULES.firefly.durationOverride, 66);
+  assert.equal(MISSION_RULES.firefly.durationOverride, 240);
   assert.equal(MISSION_RULES.rhythm.untimed, false);
   assert.match(`${MISSION_RULES.guardian.verb}${MISSION_RULES.guardian.hint}`, /三重护盾/);
   const bloom = GARDEN_LEVELS.find((level) => level.mission === "bloom");
@@ -98,9 +105,19 @@ test("every mission has a distinct rule and guardian phase", () => {
   const guardian = GARDEN_LEVELS.find((level) => level.mission === "guardian");
   assert.ok(bloom && firefly && guardian);
   assert.equal(getMissionDuration(bloom), null);
-  assert.equal(getMissionDuration(firefly), 66);
-  assert.deepEqual(getGuardianState(guardian, 0), { hpPercent: 100, phase: 1 });
+  assert.equal(getMissionDuration(firefly), 240);
+  assert.deepEqual(getGuardianState(guardian, 0), { hpPercent: 100, phase: 1, shieldName: "外环护盾" });
+  assert.equal(getGuardianState(guardian, Math.ceil(guardian.targetWords / 2)).shieldName, "荆棘核心");
   assert.equal(getGuardianState(guardian, guardian.targetWords).hpPercent, 0);
+});
+
+test("all twelve chapters expose a distinct child-visible mechanic", () => {
+  assert.equal(Object.keys(LEVEL_MECHANICS).length, 12);
+  assert.equal(new Set(Object.values(LEVEL_MECHANICS).map((mechanic) => mechanic.name)).size, 12);
+  GARDEN_LEVELS.forEach((level) => {
+    assert.ok(LEVEL_MECHANICS[level.id].action.length > 5);
+    assert.ok(LEVEL_MECHANICS[level.id].success.length > 5);
+  });
 });
 
 test("winning unlocks the twelve-level path, achievements, daily progress, and best scores", () => {
@@ -154,6 +171,12 @@ test("old saves migrate safely and retain one best-star total per level", () => 
   assert.equal(migrated.bestStars["firefly-post"], 2);
   assert.equal(migrated.bestScores["petal-gate"], 1200);
   assert.deepEqual(migrated.sessionHistory, []);
+  assert.deepEqual(migrated.endless, { bestDistance: 0, bestEvents: 0 });
+});
+
+test("infinite world records migrate and remain part of each child profile", () => {
+  const migrated = migrateGardenProgress({ ...DEFAULT_GARDEN_PROGRESS, endless: { bestDistance: 480, bestEvents: 24 } });
+  assert.deepEqual(migrated.endless, { bestDistance: 480, bestEvents: 24 });
 });
 
 test("practice adapts to weak keys and recommends an unlocked review lesson", () => {
@@ -166,6 +189,17 @@ test("practice adapts to weak keys and recommends an unlocked review lesson", ()
   assert.match(word, /f/i);
   const reviewIndex = getSuggestedReviewLevel({ ...DEFAULT_GARDEN_PROGRESS, unlocked: 4, keyMastery: mastery });
   assert.equal(reviewIndex, 0);
+  assert.equal(getLearningRecommendation({ ...DEFAULT_GARDEN_PROGRESS, keyMastery: mastery }).targetKey, "f");
+  assert.equal(getSessionSupport(8, 0, 0).mode, "steady");
+  assert.equal(getSessionSupport(4, 3, 2).mode, "guided");
+});
+
+test("personal garden and Lumi bond grow from practice without a new save schema", () => {
+  const growing = { ...DEFAULT_GARDEN_PROGRESS, totalWords: 140, totalStars: 14, sessionHistory: Array.from({ length: 6 }, (_, index) => ({ date: `2026-08-0${index + 1}`, levelId: "petal-gate", accuracy: 95, wpm: 12, duration: 70, completedWords: 8, stars: 2, weakKeys: [] })) };
+  assert.ok(getSanctuaryLevel(growing) > getSanctuaryLevel(DEFAULT_GARDEN_PROGRESS));
+  assert.ok(getLumiBond(growing) > 0 && getLumiBond(growing) <= 100);
+  assert.ok(getUnlockedDecorations(growing).length >= 4);
+  assert.equal(SANCTUARY_DECORATIONS[0].id, "seed-bed");
 });
 
 test("replaying cannot farm permanent stars or full first-clear petals", () => {
