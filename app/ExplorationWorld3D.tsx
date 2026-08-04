@@ -64,24 +64,36 @@ function disposeScene(scene: THREE.Scene) {
 
 function createGroundTexture(base: string, flecks: string[], seed: number) {
   const canvas = document.createElement("canvas");
-  canvas.width = 128;
-  canvas.height = 128;
+  canvas.width = 256;
+  canvas.height = 256;
   const context = canvas.getContext("2d");
   if (!context) return null;
   context.fillStyle = base;
-  context.fillRect(0, 0, 128, 128);
+  context.fillRect(0, 0, 256, 256);
   let state = seed >>> 0;
   const random = () => {
     state = (state * 1664525 + 1013904223) >>> 0;
     return state / 4294967296;
   };
-  for (let index = 0; index < 440; index += 1) {
-    context.globalAlpha = 0.1 + random() * 0.2;
+  for (let index = 0; index < 1180; index += 1) {
+    context.globalAlpha = 0.08 + random() * 0.24;
     context.fillStyle = flecks[index % flecks.length];
-    const size = 0.45 + random() * 1.6;
+    const size = 0.4 + random() * 2.2;
     context.beginPath();
-    context.ellipse(random() * 128, random() * 128, size * 0.42, size, random() * Math.PI, 0, Math.PI * 2);
+    context.ellipse(random() * 256, random() * 256, size * 0.36, size, random() * Math.PI, 0, Math.PI * 2);
     context.fill();
+  }
+  for (let index = 0; index < 420; index += 1) {
+    const x = random() * 256;
+    const y = random() * 256;
+    const length = 2 + random() * 6;
+    context.globalAlpha = 0.08 + random() * 0.16;
+    context.strokeStyle = flecks[(index + 1) % flecks.length];
+    context.lineWidth = 0.35 + random() * 0.7;
+    context.beginPath();
+    context.moveTo(x, y);
+    context.quadraticCurveTo(x + (random() - 0.5) * 2, y - length * 0.55, x + (random() - 0.5) * 3, y - length);
+    context.stroke();
   }
   context.globalAlpha = 1;
   const texture = new THREE.CanvasTexture(canvas);
@@ -89,6 +101,33 @@ function createGroundTexture(base: string, flecks: string[], seed: number) {
   texture.wrapS = THREE.RepeatWrapping;
   texture.wrapT = THREE.RepeatWrapping;
   return texture;
+}
+
+function createOrganicPathGeometry(width: number, depth: number, seed: number) {
+  let state = seed >>> 0;
+  const random = () => {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    return state / 4294967296;
+  };
+  const steps = 10;
+  const left: THREE.Vector2[] = [];
+  const right: THREE.Vector2[] = [];
+  for (let index = 0; index <= steps; index += 1) {
+    const progress = index / steps;
+    const z = -depth / 2 + progress * depth;
+    const centerOffset = Math.sin(progress * Math.PI * 1.4 + seed) * width * 0.035;
+    const halfWidth = (width / 2) * (0.91 + random() * 0.13);
+    left.push(new THREE.Vector2(centerOffset - halfWidth, z));
+    right.push(new THREE.Vector2(centerOffset + halfWidth, z));
+  }
+  const shape = new THREE.Shape();
+  shape.moveTo(left[0].x, left[0].y);
+  left.slice(1).forEach((point) => shape.lineTo(point.x, point.y));
+  right.reverse().forEach((point) => shape.lineTo(point.x, point.y));
+  shape.closePath();
+  const geometry = new THREE.ShapeGeometry(shape);
+  geometry.rotateX(-Math.PI / 2);
+  return geometry;
 }
 
 function enableSoftShadows(object: THREE.Object3D) {
@@ -135,11 +174,12 @@ function addTree(parent: THREE.Object3D, x: number, z: number, scale: number, co
     branch.rotation.z = angle;
     tree.add(branch);
   });
-  const blossomMaterial = new THREE.MeshStandardMaterial({ color, roughness: 0.88 });
-  [[0, 2.15, 0], [-0.48, 1.98, 0.06], [0.46, 2.01, -0.08], [-0.2, 2.45, 0.04], [0.28, 2.38, 0.1], [-0.62, 2.28, -0.02], [0.62, 2.3, 0.02]].forEach(([px, py, pz], index) => {
-    const crown = new THREE.Mesh(new THREE.DodecahedronGeometry(index === 0 ? 0.57 : 0.43, 1), blossomMaterial);
+  const blossomMaterial = new THREE.MeshStandardMaterial({ color, roughness: 0.96 });
+  [[0, 2.15, 0], [-0.48, 1.98, 0.06], [0.46, 2.01, -0.08], [-0.2, 2.45, 0.04], [0.28, 2.38, 0.1], [-0.62, 2.28, -0.02], [0.62, 2.3, 0.02], [-0.05, 2.62, -0.08], [0.48, 2.56, -0.1]].forEach(([px, py, pz], index) => {
+    const crown = new THREE.Mesh(new THREE.SphereGeometry(index === 0 ? 0.52 : 0.38, 12, 9), blossomMaterial);
     crown.position.set(px, py, pz);
-    crown.scale.set(1, 0.82 + (index % 3) * 0.08, 0.92);
+    crown.scale.set(1.12 + (index % 2) * 0.12, 0.7 + (index % 3) * 0.08, 0.92 + (index % 2) * 0.08);
+    crown.rotation.set(index * 0.31, index * 0.77, index * 0.19);
     crown.castShadow = true;
     tree.add(crown);
   });
@@ -171,8 +211,8 @@ function makeAvatar(color: string) {
   const avatar = new THREE.Group();
   const rig = new THREE.Group();
   avatar.add(rig);
-  const fur = new THREE.MeshStandardMaterial({ color: 0xfffbf2, roughness: 0.98, metalness: 0 });
-  const warmFur = new THREE.MeshStandardMaterial({ color: 0xf2e9dc, roughness: 1 });
+  const fur = new THREE.MeshPhysicalMaterial({ color: 0xfffbf2, roughness: 0.9, metalness: 0, sheen: 0.28, sheenColor: 0xfff6e9, sheenRoughness: 0.82 });
+  const warmFur = new THREE.MeshPhysicalMaterial({ color: 0xeee3d4, roughness: 0.94, sheen: 0.18, sheenColor: 0xfff3e5, sheenRoughness: 0.88 });
   const dark = new THREE.MeshStandardMaterial({ color: 0x211d27, roughness: 0.68 });
   const accent = new THREE.MeshStandardMaterial({ color, roughness: 0.55, metalness: 0.03 });
   const gold = new THREE.MeshStandardMaterial({ color: 0xf5c866, roughness: 0.48, metalness: 0.22 });
@@ -190,7 +230,7 @@ function makeAvatar(color: string) {
   head.position.set(0, 0.55, 0.08);
   head.scale.set(1.08, 1.03, 0.98);
   rig.add(head);
-  const curlGeometry = new THREE.DodecahedronGeometry(0.15, 1);
+  const curlGeometry = new THREE.SphereGeometry(0.135, 13, 10);
   [[-0.3, 0.72, 0.08], [0.3, 0.72, 0.08], [-0.2, 0.88, 0.04], [0.2, 0.88, 0.04], [0, 0.91, 0.08], [-0.36, 0.5, 0.1], [0.36, 0.5, 0.1]].forEach(([x, y, z], index) => {
     const curl = new THREE.Mesh(curlGeometry, index % 3 === 0 ? warmFur : fur);
     curl.position.set(x, y, z);
@@ -243,7 +283,7 @@ function makeAvatar(color: string) {
   const tail = new THREE.Group();
   tail.position.set(0.27, 0.12, -0.38);
   [[0, 0, 0], [0.08, 0.13, -0.03], [0.03, 0.26, 0.02]].forEach(([x, y, z], index) => {
-    const puff = new THREE.Mesh(new THREE.DodecahedronGeometry(0.15 - index * 0.012, 1), fur);
+    const puff = new THREE.Mesh(new THREE.SphereGeometry(0.15 - index * 0.012, 12, 9), fur);
     puff.position.set(x, y, z);
     tail.add(puff);
   });
@@ -369,21 +409,16 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
     const camera = new THREE.PerspectiveCamera(49, 1, 0.1, 145);
     camera.position.set(0, 4.7, 10.5);
 
+    const skyTexture = new THREE.TextureLoader().load("/worlds/blossom-panoramic-real-v2.webp");
+    skyTexture.colorSpace = THREE.SRGBColorSpace;
+    skyTexture.wrapS = THREE.RepeatWrapping;
+    skyTexture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
     const sky = new THREE.Mesh(
-      new THREE.SphereGeometry(72, 28, 18),
-      new THREE.ShaderMaterial({
-        side: THREE.BackSide,
-        uniforms: {
-          topColor: { value: new THREE.Color(0x4f94bd) },
-          horizonColor: { value: new THREE.Color(0xf1d7c9) },
-          sunColor: { value: new THREE.Color(0xfff2c4) },
-          offset: { value: 7 },
-          exponent: { value: 0.68 },
-        },
-        vertexShader: "varying vec3 vWorldPosition; void main(){vec4 worldPosition=modelMatrix*vec4(position,1.0);vWorldPosition=worldPosition.xyz;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}",
-        fragmentShader: "uniform vec3 topColor;uniform vec3 horizonColor;uniform vec3 sunColor;uniform float offset;uniform float exponent;varying vec3 vWorldPosition;void main(){vec3 d=normalize(vWorldPosition);float h=normalize(vWorldPosition+offset).y;float sun=pow(max(dot(d,normalize(vec3(-0.34,0.48,-0.81))),0.0),180.0);float haze=pow(1.0-abs(d.y),5.0);vec3 sky=mix(horizonColor,topColor,max(pow(max(h,0.0),exponent),0.0));sky=mix(sky,horizonColor,haze*0.3);sky+=sunColor*sun*1.35;gl_FragColor=vec4(sky,1.0);}",
-      }),
+      new THREE.SphereGeometry(86, 48, 30),
+      new THREE.MeshBasicMaterial({ map: skyTexture, side: THREE.BackSide, fog: false, toneMapped: false }),
     );
+    sky.rotation.y = Math.PI * 0.48;
+    sky.frustumCulled = false;
     scene.add(sky);
     scene.add(new THREE.HemisphereLight(0xddeeff, 0x53664c, 1.65));
     const sun = new THREE.DirectionalLight(0xffefd5, 3.65);
@@ -410,45 +445,43 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
       pathTexture.repeat.set(3, 8);
       pathTexture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
     }
-    const grassMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, map: grassTexture, roughness: 1 });
-    const pathMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, map: pathTexture, roughness: 0.96 });
+    const grassMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, map: grassTexture, bumpMap: grassTexture, bumpScale: 0.035, roughness: 1 });
+    const pathMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, map: pathTexture, bumpMap: pathTexture, bumpScale: 0.026, roughness: 0.98 });
     const walkableMeshes: THREE.Mesh[] = [];
-    const bank = new THREE.Mesh(new THREE.BoxGeometry(28, 0.8, 39), grassMaterial);
-    bank.position.set(0, -0.5, -7);
+    const bankGeometry = new THREE.PlaneGeometry(28, 44, 28, 44);
+    bankGeometry.rotateX(-Math.PI / 2);
+    const bankPositions = bankGeometry.attributes.position as THREE.BufferAttribute;
+    for (let index = 0; index < bankPositions.count; index += 1) {
+      const x = bankPositions.getX(index);
+      const z = bankPositions.getZ(index);
+      bankPositions.setY(index, Math.sin(x * 0.71 + z * 0.34) * 0.025 + Math.sin(z * 1.23) * 0.012);
+    }
+    bankGeometry.computeVertexNormals();
+    const bank = new THREE.Mesh(bankGeometry, grassMaterial);
+    bank.position.set(0, -0.035, -9);
     bank.receiveShadow = true;
     world.add(bank);
     walkableMeshes.push(bank);
     const pathSegments = [[0, 3.2, 5.4, 10], [0, -5.8, 5.2, 8], [0, -17.2, 5.4, 9], [0, -24, 9, 5], [-5.2, -6.8, 4.3, 4.5], [5.4, -17.5, 4.6, 5.2]];
-    pathSegments.forEach(([x, z, width, depth]) => {
-      const path = new THREE.Mesh(new THREE.BoxGeometry(width, 0.12, depth), pathMaterial);
-      path.position.set(x, 0, z);
+    pathSegments.forEach(([x, z, width, depth], index) => {
+      const path = new THREE.Mesh(createOrganicPathGeometry(width, depth, 310 + index * 17), pathMaterial);
+      path.position.set(x, 0.035 + index * 0.0007, z);
       path.receiveShadow = true;
       world.add(path);
       walkableMeshes.push(path);
     });
-    const streamMaterial = new THREE.MeshPhysicalMaterial({ color: 0x62b8cb, roughness: 0.14, metalness: 0.02, transparent: true, opacity: 0.83, clearcoat: 0.72, clearcoatRoughness: 0.18, depthWrite: false });
-    const stream = new THREE.Mesh(new THREE.BoxGeometry(19, 0.12, 4), streamMaterial);
-    stream.position.set(0, 0.035, -11.8);
+    const riverbed = new THREE.Mesh(
+      new THREE.PlaneGeometry(19, 4.2),
+      new THREE.MeshStandardMaterial({ color: 0x667067, map: pathTexture, roughness: 0.94 }),
+    );
+    riverbed.rotation.x = -Math.PI / 2;
+    riverbed.position.set(0, 0.016, -11.8);
+    world.add(riverbed);
+    const streamMaterial = new THREE.MeshPhysicalMaterial({ color: 0x79bdc8, roughness: 0.08, metalness: 0.02, transparent: true, opacity: 0.72, clearcoat: 0.9, clearcoatRoughness: 0.08, transmission: lightweight ? 0 : 0.08, depthWrite: false });
+    const stream = new THREE.Mesh(new THREE.PlaneGeometry(19, 4, 32, 8), streamMaterial);
+    stream.rotation.x = -Math.PI / 2;
+    stream.position.set(0, 0.072, -11.8);
     world.add(stream);
-
-    const distantScenery = new THREE.Group();
-    const mountainMaterial = new THREE.MeshStandardMaterial({ color: 0x6f8580, roughness: 1, flatShading: true });
-    const distantMountainMaterial = new THREE.MeshStandardMaterial({ color: 0x91a2a1, roughness: 1, flatShading: true });
-    for (let index = 0; index < 11; index += 1) {
-      const distant = index % 2 === 0;
-      const mountain = new THREE.Mesh(new THREE.ConeGeometry(6 + (index % 3) * 1.4, 8 + (index % 4) * 1.5, 7), distant ? distantMountainMaterial : mountainMaterial);
-      mountain.position.set(-31 + index * 6.3, 2.6 + (index % 2) * 0.7, -48 - (distant ? 10 : 0));
-      mountain.rotation.y = index * 0.47;
-      distantScenery.add(mountain);
-    }
-    const cloudMaterial = new THREE.MeshBasicMaterial({ color: 0xf7f3ed, transparent: true, opacity: 0.52, depthWrite: false });
-    for (let index = 0; index < 7; index += 1) {
-      const cloud = new THREE.Mesh(new THREE.SphereGeometry(1.9 + (index % 2) * 0.7, 12, 8), cloudMaterial);
-      cloud.position.set(-18 + index * 6.4, 10 + (index % 3) * 1.1, -34 - (index % 2) * 9);
-      cloud.scale.set(1.8, 0.38, 0.7);
-      distantScenery.add(cloud);
-    }
-    world.add(distantScenery);
 
     for (let index = 0; index < 24; index += 1) {
       const z = 7 - index * 1.45;
@@ -504,21 +537,23 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
       group.userData.biomeIndex = slot % ENDLESS_BIOMES.length;
       group.position.z = -34 - slot * ENDLESS_CHUNK_LENGTH;
       const terrainTint = new THREE.Color(biome.grass).lerp(new THREE.Color(0xdce2d1), 0.22);
-      const terrainMaterial = new THREE.MeshStandardMaterial({ color: terrainTint, map: grassTexture, roughness: 1 });
-      const terrain = new THREE.Mesh(new THREE.BoxGeometry(28, 0.8, ENDLESS_CHUNK_LENGTH + 0.35), terrainMaterial);
-      terrain.position.y = -0.5;
+      const terrainMaterial = new THREE.MeshStandardMaterial({ color: terrainTint, map: grassTexture, bumpMap: grassTexture, bumpScale: 0.03, roughness: 1 });
+      const terrainGeometry = new THREE.PlaneGeometry(28, ENDLESS_CHUNK_LENGTH + 0.35, 20, 16);
+      terrainGeometry.rotateX(-Math.PI / 2);
+      const terrain = new THREE.Mesh(terrainGeometry, terrainMaterial);
+      terrain.position.y = -0.035;
       terrain.receiveShadow = true;
       group.add(terrain);
       walkableMeshes.push(terrain);
       const bend = slot % 2 === 0 ? -2.4 : 2.4;
-      const mainPath = new THREE.Mesh(new THREE.BoxGeometry(6.2, 0.13, ENDLESS_CHUNK_LENGTH + 0.2), pathMaterial);
-      mainPath.position.set(bend * 0.35, 0, 0);
+      const mainPath = new THREE.Mesh(createOrganicPathGeometry(6.2, ENDLESS_CHUNK_LENGTH + 0.2, 800 + slot * 29), pathMaterial);
+      mainPath.position.set(bend * 0.35, 0.035, 0);
       mainPath.rotation.y = slot % 2 === 0 ? -0.035 : 0.035;
       mainPath.receiveShadow = true;
       group.add(mainPath);
       walkableMeshes.push(mainPath);
-      const partyIsland = new THREE.Mesh(new THREE.CylinderGeometry(4.1, 4.5, 0.5, 12), terrainMaterial);
-      partyIsland.position.set(bend * 2.7, -0.23, -2.2);
+      const partyIsland = new THREE.Mesh(new THREE.CylinderGeometry(4.1, 4.5, 0.22, 28), terrainMaterial);
+      partyIsland.position.set(bend * 2.7, -0.1, -2.2);
       partyIsland.receiveShadow = true;
       group.add(partyIsland);
       walkableMeshes.push(partyIsland);
@@ -550,22 +585,38 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
     for (let slot = 0; slot < (lightweight ? 6 : 8); slot += 1) createEndlessChunk(slot);
 
     const gate = new THREE.Group();
-    const gateStone = new THREE.MeshStandardMaterial({ color: 0xb8afa5, roughness: 0.96, metalness: 0 });
-    const gateGlow = new THREE.MeshStandardMaterial({ color: 0xffa8d0, emissive: 0xff69aa, emissiveIntensity: 1.5, roughness: 0.35 });
+    const gateStone = new THREE.MeshStandardMaterial({ color: 0x8f8b82, roughness: 1, metalness: 0, bumpMap: pathTexture, bumpScale: 0.045 });
+    const gateGlow = new THREE.MeshStandardMaterial({ color: 0xe991b1, emissive: 0xd95f8d, emissiveIntensity: 1.1, roughness: 0.5 });
+    const gateMoss = new THREE.MeshStandardMaterial({ color: 0x57745a, roughness: 1 });
+    const gateBlockGeometry = new THREE.BoxGeometry(0.62, 0.42, 0.72, 2, 2, 1);
     for (const x of [-2.1, 2.1]) {
-      const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.47, 3.2, 8), gateStone);
-      pillar.position.set(x, 1.55, -2.4);
-      pillar.castShadow = true;
-      gate.add(pillar);
-      const flower = new THREE.Mesh(new THREE.IcosahedronGeometry(0.35, 1), gateGlow);
-      flower.position.set(x, 3.25, -2.4);
-      gate.add(flower);
+      for (let index = 0; index < 7; index += 1) {
+        const block = new THREE.Mesh(gateBlockGeometry, gateStone);
+        block.position.set(x + Math.sin(index * 2.3 + x) * 0.055, 0.25 + index * 0.41, -2.4 + Math.cos(index * 1.7) * 0.025);
+        block.rotation.y = Math.sin(index * 1.9) * 0.07;
+        block.scale.set(0.95 + (index % 2) * 0.1, 0.92 + (index % 3) * 0.04, 1);
+        block.castShadow = true;
+        block.receiveShadow = true;
+        gate.add(block);
+      }
+      const moss = new THREE.Mesh(new THREE.SphereGeometry(0.24, 12, 8), gateMoss);
+      moss.position.set(x + (x < 0 ? 0.22 : -0.22), 1.35, -2.75);
+      moss.scale.set(1.3, 0.42, 0.55);
+      gate.add(moss);
     }
-    const arch = new THREE.Mesh(new THREE.TorusGeometry(2.1, 0.26, 10, 28, Math.PI), gateStone);
-    arch.position.set(0, 2.85, -2.4);
-    gate.add(arch);
+    for (let index = 0; index <= 13; index += 1) {
+      const angle = (index / 13) * Math.PI;
+      const archBlock = new THREE.Mesh(gateBlockGeometry, gateStone);
+      archBlock.position.set(Math.cos(angle) * 2.08, 2.86 + Math.sin(angle) * 1.92, -2.4);
+      archBlock.rotation.z = angle - Math.PI / 2;
+      archBlock.rotation.y = Math.sin(index * 1.4) * 0.035;
+      archBlock.scale.set(0.9, 1, 1);
+      archBlock.castShadow = true;
+      archBlock.receiveShadow = true;
+      gate.add(archBlock);
+    }
     const rune = new THREE.Mesh(new THREE.TorusGeometry(0.76, 0.055, 8, 30), gateGlow);
-    rune.position.set(0, 1.7, -2.35);
+    rune.position.set(0, 1.74, -2.34);
     gate.add(rune);
     world.add(gate);
 
@@ -952,10 +1003,8 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
 
       rune.rotation.z = time * 0.55;
       rune.scale.setScalar(live.completedWords >= 5 ? 1 + Math.sin(time * 2) * 0.04 : 0.96);
-      gate.children.forEach((child, index) => {
-        if (index < 4) return;
-        child.visible = live.completedWords < 5;
-      });
+      rune.visible = live.completedWords < 5;
+      stream.position.y = 0.072 + (motionReduced ? 0 : Math.sin(time * 1.25) * 0.004);
       bridgePieces.forEach((piece, index) => {
         const summoned = Math.max(0, Math.min(5, live.completedWords - 5)) > index;
         const targetScale = summoned ? 1 : 0.16;
@@ -996,6 +1045,7 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
       camera.position.lerp(desiredCamera, 1 - Math.exp(-delta * (motionReduced ? 12 : 6.2)));
       cameraTarget.set(avatar.position.x, avatar.position.y + 0.52, avatar.position.z - 1.55);
       camera.lookAt(cameraTarget);
+      sky.position.copy(camera.position);
       renderer.render(scene, camera);
     };
     animate();
@@ -1011,6 +1061,9 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
       resizeObserver.disconnect();
       resetRef.current = null;
       disposeScene(scene);
+      skyTexture.dispose();
+      grassTexture?.dispose();
+      pathTexture?.dispose();
       renderer.dispose();
       renderer.domElement.remove();
     };
