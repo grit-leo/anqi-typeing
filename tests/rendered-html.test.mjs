@@ -288,6 +288,10 @@ test("includes real WebGL, large-game systems, touch input, safety and persisten
   assert.ok(gltfJson.nodes.some((node) => node.name?.startsWith("TailCurl")));
   assert.ok(gltfJson.materials.some((material) => material.name === "NaturalBichonCoat"));
   assert.ok(gltfJson.materials.some((material) => material.name === "IndividualCurlLayer"));
+  const naturalCoat = gltfJson.materials.find((material) => material.name === "NaturalBichonCoat");
+  assert.ok(naturalCoat.normalTexture, "the Bichon coat should embed a fine curl normal texture");
+  assert.equal(gltfJson.textures[naturalCoat.normalTexture.index].name, "FineBichonCurlNormal");
+  assert.ok(gltfJson.images.some((image) => image.mimeType === "image/png" && Number.isInteger(image.bufferView)));
   assert.ok(bichonCinematic.byteLength > 150_000);
   assert.match(css, /bichon-cinematic-v1\.webp/);
   assert.match(css, /cinematicCurtain/);

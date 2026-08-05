@@ -382,7 +382,7 @@ export function PlayCanvasWorld3D(props: PlayCanvasWorld3DProps) {
       model.name = "AnqiBichonGLB";
       model.setLocalEulerAngles(0, 0, 0);
       model.setLocalScale(1.28, 1.28, 1.28);
-      avatarVisualBaseY = 0.19;
+      avatarVisualBaseY = -0.02;
       model.setLocalPosition(0, avatarVisualBaseY, 0);
       const animations = (container as pc.ContainerResource & { animations: pc.Asset[] }).animations ?? [];
       if (animations.length > 0) model.addComponent("animation", { assets: animations, speed: 1, activate: true, loop: true });
