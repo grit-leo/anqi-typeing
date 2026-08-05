@@ -220,6 +220,8 @@ test("includes real WebGL, large-game systems, touch input, safety and persisten
   assert.match(playCanvas, /webglcontextlost/);
   assert.match(playCanvas, /WorldShockwave/);
   assert.match(playCanvas, /cameraImpact/);
+  assert.match(playCanvas, /applyRuntimeQuality/);
+  assert.match(playCanvas, /averageFps < 43/);
   assert.match(levelSchema, /schemaVersion: 1/);
   assert.match(levelSchema, /BLOSSOM_TRAIL_LEVEL/);
   assert.match(levelSchema, /encounters:/);

@@ -197,6 +197,7 @@ export function PlayCanvasWorld3D(props: PlayCanvasWorld3DProps) {
     const coarsePointer = window.matchMedia("(pointer: coarse)").matches;
     const lowMemory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory !== undefined && (navigator as Navigator & { deviceMemory?: number }).deviceMemory! <= 4;
     const quality: ExplorationWorldStatus["quality"] = coarsePointer || lowMemory ? "流畅" : "精细";
+    let runtimeQuality = quality;
     app.graphicsDevice.maxPixelRatio = Math.min(window.devicePixelRatio || 1, quality === "精细" ? 1.75 : 1.1);
     app.setCanvasFillMode(pc.FILLMODE_FILL_WINDOW);
     app.setCanvasResolution(pc.RESOLUTION_AUTO);
@@ -335,6 +336,17 @@ export function PlayCanvasWorld3D(props: PlayCanvasWorld3DProps) {
       return { entity, age: 2, phase: seeded(index + 810) * Math.PI * 2 };
     });
     let nextDust = 0;
+    const canRecoverPrecision = !coarsePointer && !lowMemory;
+    const applyRuntimeQuality = (next: ExplorationWorldStatus["quality"]) => {
+      if (runtimeQuality === next) return;
+      runtimeQuality = next;
+      app.graphicsDevice.maxPixelRatio = Math.min(window.devicePixelRatio || 1, next === "精细" ? 1.75 : 1.05);
+      if (sunlight.light) sunlight.light.castShadows = next === "精细";
+      petals.forEach(({ entity }, index) => { entity.enabled = next === "精细" || index % 2 === 0; });
+      motes.forEach(({ entity }, index) => { entity.enabled = next === "精细" || index % 2 === 0; });
+      mistBanks.forEach(({ entity }, index) => { entity.enabled = next === "精细" || index < 2; });
+      app.resizeCanvas(canvas.clientWidth || window.innerWidth, canvas.clientHeight || window.innerHeight);
+    };
 
     const destination = new pc.Entity("ClickDestination");
     primitive(destination, "Destination", "cylinder", [0, 0, 0], [0.42, 0.018, 0.42], accent, false);
@@ -391,6 +403,9 @@ export function PlayCanvasWorld3D(props: PlayCanvasWorld3DProps) {
     let lastCheckpoint = -1;
     let celebrateUntil = 0;
     let cameraImpact = 0;
+    let performanceWindow = 0;
+    let performanceFrames = 0;
+    let recoveryWindows = 0;
     const cameraPosition = new pc.Vec3();
     const desiredCamera = new pc.Vec3();
     const lookTarget = new pc.Vec3();
@@ -477,6 +492,22 @@ export function PlayCanvasWorld3D(props: PlayCanvasWorld3DProps) {
       const live = liveRef.current;
       const delta = Math.min(dt, 0.04);
       elapsed += delta;
+      performanceWindow += dt;
+      performanceFrames += 1;
+      if (performanceWindow >= 2) {
+        const averageFps = performanceFrames / performanceWindow;
+        if (runtimeQuality === "精细" && averageFps < 43) {
+          applyRuntimeQuality("流畅");
+          recoveryWindows = 0;
+        } else if (runtimeQuality === "流畅" && canRecoverPrecision && averageFps > 55) {
+          recoveryWindows += 1;
+          if (recoveryWindows >= 3) applyRuntimeQuality("精细");
+        } else {
+          recoveryWindows = 0;
+        }
+        performanceWindow = 0;
+        performanceFrames = 0;
+      }
       storyRoot.enabled = !live.endlessMode;
       endlessRoot.enabled = live.endlessMode;
 
@@ -718,7 +749,7 @@ export function PlayCanvasWorld3D(props: PlayCanvasWorld3DProps) {
         statusTimer = 0;
         const distance = live.endlessMode ? Math.max(0, Math.floor(-avatarPosition.z - 24)) : Math.max(0, Math.floor(5.5 - avatarPosition.z));
         const zone = live.endlessMode ? Math.floor(live.endlessWords / 5) + 1 : 0;
-        live.onWorldStatus({ distance, zone, biome: live.endlessMode ? getEndlessBiome(zone - 1).name : "樱花谷", movingByClick: Boolean(clickTarget), quality });
+        live.onWorldStatus({ distance, zone, biome: live.endlessMode ? getEndlessBiome(zone - 1).name : "樱花谷", movingByClick: Boolean(clickTarget), quality: runtimeQuality });
       }
     });
 
