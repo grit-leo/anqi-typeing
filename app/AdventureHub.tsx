@@ -79,12 +79,12 @@ export function AdventureHub({ progress, levelIndex, onChooseLevel, onStart, onS
   return (
     <section className="adventure-hub" aria-label="大型冒险中心">
       <nav className="hub-nav" aria-label="冒险中心功能">
-        <button className={view === "map" ? "active" : ""} onClick={() => setView("map")}><i>⌁</i><span>世界地图</span></button>
-        <button className={view === "sanctuary" ? "active" : ""} onClick={() => setView("sanctuary")}><i>❀</i><span>我的花园</span></button>
-        <button className={view === "review" ? "active" : ""} onClick={() => setView("review")}><i>⌨</i><span>露米复习屋</span>{weakKeys.length > 0 && <b />}</button>
-        <button className={view === "daily" ? "active" : ""} onClick={() => setView("daily")}><i>☀</i><span>每日委托</span>{!dailyClaimed && dailyWords >= dailyTarget && <b />}</button>
-        <button className={view === "collection" ? "active" : ""} onClick={() => setView("collection")}><i>♢</i><span>魔法衣橱</span></button>
-        <button className={view === "achievements" ? "active" : ""} onClick={() => setView("achievements")}><i>♛</i><span>成就图鉴</span></button>
+        <button className={view === "map" ? "active" : ""} onClick={() => setView("map")}><i>01</i><span>学习地图</span></button>
+        <button className={view === "sanctuary" ? "active" : ""} onClick={() => setView("sanctuary")}><i>02</i><span>我的空间</span></button>
+        <button className={view === "review" ? "active" : ""} onClick={() => setView("review")}><i>03</i><span>重点复习</span>{weakKeys.length > 0 && <b />}</button>
+        <button className={view === "daily" ? "active" : ""} onClick={() => setView("daily")}><i>04</i><span>今日任务</span>{!dailyClaimed && dailyWords >= dailyTarget && <b />}</button>
+        <button className={view === "collection" ? "active" : ""} onClick={() => setView("collection")}><i>05</i><span>外观</span></button>
+        <button className={view === "achievements" ? "active" : ""} onClick={() => setView("achievements")}><i>06</i><span>成长记录</span></button>
       </nav>
 
       <div className="hub-body">

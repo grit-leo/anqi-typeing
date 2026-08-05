@@ -977,16 +977,16 @@ export default function Home() {
 
       <header className="game-topbar">
         <button className="brand-lockup" onClick={returnToLobby} aria-label="返回安琪打字机首页">
-          <span className="brand-gem">✦</span>
-          <span><strong>安琪打字机</strong><small>MAGIC GARDEN</small></span>
+          <span className="brand-gem">A</span>
+          <span><strong>安琪打字机</strong><small>EXPLORATION TYPING</small></span>
         </button>
         {phase === "lobby" ? (
           <div className="profile-cluster">
             <button className="learner-pill" onClick={() => { setSettingsOpen(false); setProfileOpen((current) => !current); }} aria-expanded={profileOpen} aria-label="切换儿童档案"><i>{activeProfile.name.slice(0, 1)}</i><span><small>正在学习</small><b>{activeProfile.name}</b></span><em>⌄</em></button>
             <div className="profile-strip" aria-label="成长记录">
-              <span><i>✿</i><b>{progress.petals}</b><small>花瓣</small></span>
-              <span><i>★</i><b>{progress.totalStars}</b><small>星星</small></span>
-              <span className="player-badge"><i>{playerLevel}</i><b>花语魔法师</b></span>
+              <span><i>练</i><b>{progress.petals}</b><small>练习点</small></span>
+              <span><i>章</i><b>{progress.totalStars}</b><small>徽章</small></span>
+              <span className="player-badge"><i>{playerLevel}</i><b>自然探索者</b></span>
             </div>
           </div>
         ) : (
@@ -1041,16 +1041,16 @@ export default function Home() {
         <section className="lobby-screen" aria-label="星愿花园主菜单">
           <div className="lobby-keyart" aria-hidden="true" />
           <div className="lobby-copy">
-            <span className="season-chip"><i /> 9岁专注训练 · 四大世界十二关 + 无限探索</span>
-            <p className="lobby-eyebrow">ANQI TYPER · STORY SEASON 01</p>
+            <span className="season-chip"><i /> 为 9 岁孩子设计 · 准确、专注、可持续</span>
+            <p className="lobby-eyebrow">ANQI TYPER · OUTDOOR LEARNING</p>
             <h1>安琪打字机</h1>
-            <h2>星愿花园 · 四界大冒险</h2>
-            <p className="lobby-lead">用准确指法穿越樱花谷、月光湖、云上王城与极光圣殿。完成樱花谷主线后，还能进入持续生成的无限世界，点击地面探索并不断遇见新的打字奇遇。</p>
+            <h2>在自然中探索，也把字打准</h2>
+            <p className="lobby-lead">跟随比熊安琪穿过山谷、湖岸与林间小路。点击地面前进，在真实场景中寻找任务；每次只练一个清晰目标，先准确，再逐步提速。</p>
             <div className="lobby-actions">
-              <button className="play-button" onClick={requestStart}><span>开始冒险</span><i>按 Enter</i><b>→</b></button>
-              <button className="story-button" onClick={() => setHelpOpen(true)}>观看玩法 <span>▶</span></button>
+              <button className="play-button" onClick={requestStart}><span>开始探索</span><i>按 Enter</i><b>→</b></button>
+              <button className="story-button" onClick={() => setHelpOpen(true)}>了解玩法 <span>▶</span></button>
             </div>
-            <div className="promise-row"><span>✦ 先准确再提速</span><span>✦ 每次约 4–6 分钟</span><span>✦ 本机独立学习档案</span></div>
+            <div className="promise-row"><span>先准确再提速</span><span>每次约 4–6 分钟</span><span>本机独立学习档案</span></div>
           </div>
 
           <AdventureHub progress={progress} levelIndex={levelIndex} onChooseLevel={chooseLevel} onStart={requestStart} onStartReview={startReview} onStartEndless={startEndlessWorld} onClaimDaily={claimDaily} onCosmetic={chooseCosmetic} />
@@ -1106,7 +1106,7 @@ export default function Home() {
             </label>
             <KeyboardCoach target={target} learnedKeys={level.learnedKeys} newKeys={level.newKeys} wrongStreak={wrongStreak} />
           </div>
-          {flash === "word" && <div className="word-burst" aria-live="polite">PERFECT SPELL <span>✦</span></div>}
+          {flash === "word" && <div className="word-burst" aria-live="polite">输入完成 <span>✓</span></div>}
           {toast && <div className="game-toast" aria-live="polite">{toast}</div>}
           <span className="sr-only" aria-live="assertive">{flash === "wrong" ? "字母不对，再试一次" : flash === "correct" ? "正确" : ""}</span>
         </section>

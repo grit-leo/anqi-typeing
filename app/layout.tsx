@@ -5,15 +5,15 @@ import "./globals.css";
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
-const title = "安琪打字机｜比熊的星愿打字冒险";
-const description = "跟随安琪比熊探索实景动漫 3D 世界，在自然场景、机关奇遇和无限旅程中练习准确而快乐的打字。";
+const title = "安琪打字机｜比熊自然探索打字游戏";
+const description = "跟随比熊安琪走进写实自然场景，通过点击探索、机关任务与无限旅程，练习准确而专注的打字。";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://key-quest-cn.gitluochao.chatgpt.site"),
   title,
   description,
-  openGraph: { title, description, type: "website", images: [{ url: "/og-bichon-v1.png", width: 1672, height: 941, alt: "安琪比熊在实景动漫樱花谷开启星愿打字冒险" }] },
-  twitter: { card: "summary_large_image", title, description, images: ["/og-bichon-v1.png"] },
+  openGraph: { title, description, type: "website", images: [{ url: "/worlds/bichon-garden-real-v1.webp", width: 1672, height: 941, alt: "一只真实的奶油白比熊站在雨后自然花园石径上" }] },
+  twitter: { card: "summary_large_image", title, description, images: ["/worlds/bichon-garden-real-v1.webp"] },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

@@ -285,51 +285,44 @@ function makeAvatar(color: string) {
   const accent = new THREE.MeshStandardMaterial({ color, roughness: 0.55, metalness: 0.03 });
   const gold = new THREE.MeshStandardMaterial({ color: 0xf5c866, roughness: 0.48, metalness: 0.22 });
 
-  const body = new THREE.Mesh(new THREE.SphereGeometry(0.43, 22, 17), fur);
-  body.position.set(0, 0.03, -0.02);
-  body.scale.set(1.08, 0.9, 1.02);
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.43, 28, 20), fur);
+  body.position.set(0, 0.03, -0.12);
+  body.scale.set(0.86, 0.82, 1.32);
   rig.add(body);
   const chest = new THREE.Mesh(new THREE.SphereGeometry(0.31, 18, 14), warmFur);
-  chest.position.set(0, 0.05, 0.29);
-  chest.scale.set(1.05, 1.15, 0.54);
+  chest.position.set(0, 0.03, 0.3);
+  chest.scale.set(1.02, 1.08, 0.68);
   rig.add(chest);
 
   const head = new THREE.Mesh(new THREE.SphereGeometry(0.43, 24, 18), fur);
-  head.position.set(0, 0.55, 0.08);
-  head.scale.set(1.08, 1.03, 0.98);
+  head.position.set(0, 0.58, 0.4);
+  head.scale.set(0.92, 0.88, 0.86);
   rig.add(head);
-  const curlGeometry = new THREE.SphereGeometry(0.135, 13, 10);
-  [[-0.3, 0.72, 0.08], [0.3, 0.72, 0.08], [-0.2, 0.88, 0.04], [0.2, 0.88, 0.04], [0, 0.91, 0.08], [-0.36, 0.5, 0.1], [0.36, 0.5, 0.1]].forEach(([x, y, z], index) => {
-    const curl = new THREE.Mesh(curlGeometry, index % 3 === 0 ? warmFur : fur);
-    curl.position.set(x, y, z);
-    curl.scale.setScalar(0.9 + (index % 2) * 0.12);
-    rig.add(curl);
-  });
 
   const muzzle = new THREE.Mesh(new THREE.SphereGeometry(0.19, 18, 13), warmFur);
-  muzzle.position.set(0, 0.49, 0.39);
-  muzzle.scale.set(1.1, 0.72, 0.78);
+  muzzle.position.set(0, 0.51, 0.66);
+  muzzle.scale.set(1.12, 0.68, 0.84);
   rig.add(muzzle);
   const nose = new THREE.Mesh(new THREE.SphereGeometry(0.064, 14, 10), dark);
-  nose.position.set(0, 0.53, 0.54);
+  nose.position.set(0, 0.55, 0.81);
   nose.scale.set(1.08, 0.8, 0.72);
   rig.add(nose);
   const eyes: THREE.Mesh[] = [];
   for (const x of [-0.145, 0.145]) {
     const eye = new THREE.Mesh(new THREE.SphereGeometry(0.057, 14, 10), dark);
-    eye.position.set(x, 0.66, 0.42);
+    eye.position.set(x, 0.65, 0.68);
     eye.scale.set(0.9, 1.08, 0.62);
     rig.add(eye);
     const sparkle = new THREE.Mesh(new THREE.SphereGeometry(0.014, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffffff }));
-    sparkle.position.set(x - 0.014, 0.681, 0.455);
+    sparkle.position.set(x - 0.014, 0.671, 0.713);
     rig.add(sparkle);
     eyes.push(eye);
   }
 
   const ears: THREE.Mesh[] = [];
-  for (const x of [-0.39, 0.39]) {
+  for (const x of [-0.31, 0.31]) {
     const ear = new THREE.Mesh(new THREE.CapsuleGeometry(0.13, 0.25, 6, 12), warmFur);
-    ear.position.set(x, 0.51, 0.03);
+    ear.position.set(x, 0.49, 0.37);
     ear.rotation.z = x < 0 ? 0.2 : -0.2;
     ear.scale.set(0.86, 1.08, 0.76);
     rig.add(ear);
@@ -337,7 +330,7 @@ function makeAvatar(color: string) {
   }
 
   const legs: THREE.Mesh[] = [];
-  [[-0.25, 0.2], [0.25, 0.2], [-0.25, -0.2], [0.25, -0.2]].forEach(([x, z]) => {
+  [[-0.25, 0.29], [0.25, 0.29], [-0.25, -0.42], [0.25, -0.42]].forEach(([x, z]) => {
     const leg = new THREE.Mesh(new THREE.CapsuleGeometry(0.105, 0.18, 5, 10), fur);
     leg.position.set(x, -0.36, z);
     rig.add(leg);
@@ -349,33 +342,31 @@ function makeAvatar(color: string) {
   });
 
   const tail = new THREE.Group();
-  tail.position.set(0.27, 0.12, -0.38);
-  [[0, 0, 0], [0.08, 0.13, -0.03], [0.03, 0.26, 0.02]].forEach(([x, y, z], index) => {
-    const puff = new THREE.Mesh(new THREE.SphereGeometry(0.15 - index * 0.012, 12, 9), fur);
-    puff.position.set(x, y, z);
-    tail.add(puff);
-  });
+  tail.position.set(0.17, 0.14, -0.64);
+  const tailCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(0, 0, 0),
+    new THREE.Vector3(0.11, 0.16, -0.04),
+    new THREE.Vector3(0.13, 0.36, 0.03),
+    new THREE.Vector3(0.04, 0.5, 0.17),
+    new THREE.Vector3(-0.09, 0.45, 0.29),
+  ]);
+  tail.add(new THREE.Mesh(new THREE.TubeGeometry(tailCurve, 28, 0.083, 9, false), fur));
+  const tailTip = new THREE.Mesh(new THREE.SphereGeometry(0.12, 18, 13), fur);
+  tailTip.position.set(-0.09, 0.45, 0.29);
+  tail.add(tailTip);
   rig.add(tail);
 
   const collar = new THREE.Mesh(new THREE.TorusGeometry(0.31, 0.035, 8, 24), accent);
-  collar.position.set(0, 0.3, 0.06);
+  collar.position.set(0, 0.34, 0.31);
   collar.rotation.x = Math.PI / 2;
   collar.scale.z = 0.92;
   rig.add(collar);
   const tag = new THREE.Mesh(new THREE.OctahedronGeometry(0.075, 0), gold);
-  tag.position.set(0, 0.25, 0.37);
+  tag.position.set(0, 0.27, 0.51);
   tag.rotation.z = Math.PI / 4;
   rig.add(tag);
   const bow = new THREE.Group();
-  for (const x of [-0.11, 0.11]) {
-    const wing = new THREE.Mesh(new THREE.SphereGeometry(0.105, 12, 9), accent);
-    wing.position.x = x;
-    wing.scale.set(1.3, 0.72, 0.46);
-    bow.add(wing);
-  }
-  const bowCenter = new THREE.Mesh(new THREE.SphereGeometry(0.057, 10, 8), gold);
-  bow.add(bowCenter);
-  bow.position.set(0, 0.42, -0.39);
+  bow.position.set(0, 0.34, 0.31);
   rig.add(bow);
 
   const contactShadow = new THREE.Mesh(
@@ -1117,7 +1108,7 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
           object.castShadow = !lightweight;
           object.receiveShadow = true;
           if (object.material?.name === "AnqiRose") object.material.color.set(liveRef.current.cosmeticColor);
-          if (lightweight && object.name.startsWith("FurTufts")) object.visible = false;
+          if (lightweight && object.name.startsWith("FurShell")) object.visible = false;
         }
       });
       const oldAvatar = avatar;
@@ -1528,8 +1519,8 @@ export function ExplorationWorld3D(props: ExplorationWorld3DProps) {
           renderer.shadowMap.enabled = qualityMode === "精细";
           petals.forEach((petal, index) => { petal.visible = qualityMode === "精细" || index % 2 === 0; });
           atmosphereMotes.visible = qualityMode === "精细";
-          const furBody = avatar.getObjectByName("FurTuftsBody");
-          const furHead = avatar.getObjectByName("FurTuftsHead");
+          const furBody = avatar.getObjectByName("FurShellBody");
+          const furHead = avatar.getObjectByName("FurShellHead");
           if (furBody) furBody.visible = qualityMode === "精细";
           if (furHead) furHead.visible = qualityMode === "精细";
           live.onWorldStatus({
