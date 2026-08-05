@@ -44,7 +44,7 @@ test("server-renders the full-screen Magic Garden commercial game", async () => 
 });
 
 test("includes real WebGL, large-game systems, touch input, safety and persistence", async () => {
-  const [page, hub, keyboard, parentReport, stage, exploration, playCanvas, levelSchema, explorationEngine, engine, css, layout, packageJson, bichonModel] = await Promise.all([
+  const [page, hub, keyboard, parentReport, stage, exploration, playCanvas, levelSchema, explorationEngine, engine, css, layout, packageJson, bichonModel, bichonCinematic] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/AdventureHub.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/KeyboardCoach.tsx", import.meta.url), "utf8"),
@@ -59,6 +59,7 @@ test("includes real WebGL, large-game systems, touch input, safety and persisten
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
     readFile(new URL("../public/models/anqi-bichon.glb", import.meta.url)),
+    readFile(new URL("../public/worlds/bichon-cinematic-v1.webp", import.meta.url)),
   ]);
 
   assert.match(page, /window\.addEventListener\("keydown"/);
@@ -100,10 +101,8 @@ test("includes real WebGL, large-game systems, touch input, safety and persisten
   assert.match(page, /isExplorationBoundary/);
   assert.match(page, /startEndlessWorld/);
   assert.match(page, /getEndlessReward/);
-  assert.match(page, /character-cast/);
-  assert.match(page, /characters\/anqi-v2\.webp/);
-  assert.match(page, /characters\/lumi-v2\.webp/);
-  assert.match(page, /characters\/flower-spirit-v2\.webp/);
+  assert.match(page, /bichon-character-cast/);
+  assert.match(page, /bichon-action-image/);
   assert.match(page, /garden-growth/);
   assert.match(page, /world-challenge/);
   assert.match(page, /anqi-magic-garden-profiles/);
@@ -115,6 +114,9 @@ test("includes real WebGL, large-game systems, touch input, safety and persisten
   assert.match(page, /totalReactionMs/);
   assert.match(page, /沉浸声音与鼓励/);
   assert.match(page, /discoverWorldSecret/);
+  assert.match(page, /CINEMATIC_COPY/);
+  assert.match(page, /bichon-cinematic/);
+  assert.match(page, /epic-word-reaction/);
   assert.match(css, /flash-correct \.spell-ray/);
   assert.match(css, /flash-word \.flower-character/);
   assert.match(css, /flash-wrong \.lumi-character/);
@@ -213,6 +215,8 @@ test("includes real WebGL, large-game systems, touch input, safety and persisten
   assert.match(playCanvas, /mobile-explore-controls/);
   assert.match(playCanvas, /ResizeObserver/);
   assert.match(playCanvas, /webglcontextlost/);
+  assert.match(playCanvas, /WorldShockwave/);
+  assert.match(playCanvas, /cameraImpact/);
   assert.match(levelSchema, /schemaVersion: 1/);
   assert.match(levelSchema, /BLOSSOM_TRAIL_LEVEL/);
   assert.match(levelSchema, /encounters:/);
@@ -274,7 +278,14 @@ test("includes real WebGL, large-game systems, touch input, safety and persisten
   assert.deepEqual(gltfJson.animations.map((animation) => animation.name), ["idle", "run", "jump", "sniff", "celebrate"]);
   assert.ok(gltfJson.nodes.some((node) => node.name === "FurShellBody"));
   assert.ok(gltfJson.nodes.some((node) => node.name === "FurShellHead"));
+  assert.ok(gltfJson.nodes.some((node) => node.name?.startsWith("BodyCurl")));
+  assert.ok(gltfJson.nodes.some((node) => node.name?.startsWith("HeadCurl")));
+  assert.ok(gltfJson.nodes.some((node) => node.name?.startsWith("TailCurl")));
   assert.ok(gltfJson.materials.some((material) => material.name === "NaturalBichonCoat"));
+  assert.ok(gltfJson.materials.some((material) => material.name === "IndividualCurlLayer"));
+  assert.ok(bichonCinematic.byteLength > 150_000);
+  assert.match(css, /bichon-cinematic-v1\.webp/);
+  assert.match(css, /cinematicCurtain/);
   assert.match(layout, /bichon-garden-real-v1\.webp/);
   assert.match(layout, /summary_large_image/);
   assert.match(layout, /lang="zh-CN"/);

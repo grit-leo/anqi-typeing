@@ -49,7 +49,7 @@ export const BLOSSOM_TRAIL_LEVEL = {
   subtitle: "PlayCanvas 数据化探索样板",
   spawn: [0, 0.58, 5.5],
   bounds: { minX: -9.5, maxX: 9.5, minZ: -31, maxZ: 7 },
-  camera: { distance: 6.4, height: 3.1, lookAhead: 1.7 },
+  camera: { distance: 5.35, height: 2.68, lookAhead: 1.5 },
   palette: {
     sky: "#8aa79e",
     fog: "#b8c4ba",

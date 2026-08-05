@@ -1,7 +1,6 @@
 "use client";
 
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
-import Image from "next/image";
 import {
   applyGardenResult,
   buyOrEquipCosmetic,
@@ -54,6 +53,7 @@ const ExplorationWorld3D = lazy(() => import("./PlayCanvasWorld3D").then((module
 
 type Phase = "lobby" | "exploring" | "playing" | "paused" | "complete";
 type Flash = "correct" | "wrong" | "word" | null;
+type CinematicKind = "launch" | "endless" | "milestone" | "victory";
 type SessionSnapshot = { correctHits: number; mistakes: number; completedWords: number; bestCombo: number; elapsed: number };
 type LearnerProfile = { id: string; name: string; createdAt: number };
 type ProgressBackup = { format: "anqi-typer-backup"; version: 1; profiles: LearnerProfile[]; activeProfileId: string; progressByProfile: Record<string, GardenProgress> };
@@ -64,6 +64,12 @@ const SETTINGS_KEY = "anqi-magic-garden-settings";
 const PROFILES_KEY = "anqi-magic-garden-profiles";
 const ACTIVE_PROFILE_KEY = "anqi-magic-garden-active-profile";
 const DEFAULT_PROFILE: LearnerProfile = { id: "default", name: "安琪", createdAt: 0 };
+const CINEMATIC_COPY: Record<CinematicKind, { kicker: string; title: string; detail: string }> = {
+  launch: { kicker: "ANQI · FIELD TEAM", title: "安琪，出发！", detail: "沿着真实山谷寻找打字任务" },
+  endless: { kicker: "ENDLESS TRAIL", title: "新的小路正在生成", detail: "和比熊安琪一起跑向未知区域" },
+  milestone: { kicker: "WORLD RESPONSE", title: "打字改变了世界", detail: "准确输入让自然重新苏醒" },
+  victory: { kicker: "TRAIL COMPLETED", title: "安琪和你做到了！", detail: "这一段旅程已经被准确的手指点亮" },
+};
 
 function profileProgressKey(profileId: string): string {
   return profileId === DEFAULT_PROFILE.id ? PROGRESS_KEY : `${PROGRESS_KEY}:${profileId}`;
@@ -141,12 +147,14 @@ export default function Home() {
   const [parentReportOpen, setParentReportOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [pausedFrom, setPausedFrom] = useState<"exploring" | "playing">("playing");
+  const [cinematicMoment, setCinematicMoment] = useState<{ kind: CinematicKind; nonce: number } | null>(null);
   const startedAt = useRef(0);
   const finishingRef = useRef(false);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const finishTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const parentHoldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cinematicTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const settingsResumeRef = useRef(false);
   const reviewModeRef = useRef(false);
   const missionBonusRef = useRef(0);
@@ -248,6 +256,7 @@ export default function Home() {
     if (finishTimer.current) clearTimeout(finishTimer.current);
     if (toastTimer.current) clearTimeout(toastTimer.current);
     if (parentHoldTimer.current) clearTimeout(parentHoldTimer.current);
+    if (cinematicTimer.current) clearTimeout(cinematicTimer.current);
     window.speechSynthesis?.cancel();
     ambientRef.current = null;
     void audioContextRef.current?.close();
@@ -365,7 +374,7 @@ export default function Home() {
   const showFlash = useCallback((kind: Exclude<Flash, null>) => {
     setFlash(kind);
     if (flashTimer.current) clearTimeout(flashTimer.current);
-    flashTimer.current = setTimeout(() => setFlash(null), kind === "word" ? 520 : 180);
+    flashTimer.current = setTimeout(() => setFlash(null), kind === "word" ? 760 : 180);
   }, []);
 
   const showToast = useCallback((message: string) => {
@@ -373,6 +382,12 @@ export default function Home() {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(""), 1400);
   }, []);
+
+  const playCinematic = useCallback((kind: CinematicKind, duration = 1900) => {
+    if (cinematicTimer.current) clearTimeout(cinematicTimer.current);
+    setCinematicMoment({ kind, nonce: Date.now() });
+    cinematicTimer.current = setTimeout(() => setCinematicMoment(null), reducedMotion ? 420 : duration);
+  }, [reducedMotion]);
 
   const finishGame = useCallback((snapshot?: SessionSnapshot) => {
     if (finishingRef.current) return;
@@ -384,6 +399,7 @@ export default function Home() {
     setElapsed(elapsedSeconds);
     setResult(finalResult);
     setPhase("complete");
+    if (finalResult.won) playCinematic("victory", 2100);
     playTone("win");
     setProgress((current) => {
       const next = applyGardenResult(current, levelIndex, finalResult, final.completedWords, final.bestCombo, getLocalDateKey(), sessionKeyStatsRef.current);
@@ -394,7 +410,7 @@ export default function Home() {
       }
       return next;
     });
-  }, [activeProfileId, level, levelIndex, playTone, progress]);
+  }, [activeProfileId, level, levelIndex, playCinematic, playTone, progress]);
 
   useEffect(() => {
     if (phase !== "playing" && phase !== "exploring") return;
@@ -416,6 +432,7 @@ export default function Home() {
   }, [calmSession, finishGame, level.mission, missionDuration, phase, showToast]);
 
   const beginSession = useCallback(() => {
+    playCinematic("launch", 2050);
     setEndlessMode(false);
     setEndlessWords(0);
     setWorldStatus({ distance: 0, zone: 1, biome: "樱风原野", movingByClick: false, quality: "精细" });
@@ -444,7 +461,7 @@ export default function Home() {
     setPausedFrom(exploreFirst ? "exploring" : "playing");
     setPhase(exploreFirst ? "exploring" : "playing");
     if (!exploreFirst) window.setTimeout(() => mobileInputRef.current?.focus({ preventScroll: true }), 120);
-  }, [level.id]);
+  }, [level.id, playCinematic]);
 
   const startEndlessWorld = useCallback(() => {
     if (finishTimer.current) clearTimeout(finishTimer.current);
@@ -475,8 +492,9 @@ export default function Home() {
     startedAt.current = Date.now();
     setPausedFrom("exploring");
     setPhase("exploring");
+    playCinematic("endless", 2050);
     showToast("无限世界已开启 · 点击路面即可自动前往");
-  }, [showToast]);
+  }, [playCinematic, showToast]);
 
   const requestStart = useCallback(() => {
     try {
@@ -790,6 +808,7 @@ export default function Home() {
             finishingRef.current = false;
             setPausedFrom("exploring");
             setPhase("exploring");
+            playCinematic("milestone", 1250);
             showToast(completedEncounter?.success ?? "机关已开启，继续向前探索");
           }, reducedMotion ? 100 : 560);
         } else if (endlessMode && isEndlessBoundary(nextEndlessWords)) {
@@ -818,6 +837,7 @@ export default function Home() {
             finishingRef.current = false;
             setPausedFrom("exploring");
             setPhase("exploring");
+            playCinematic("milestone", 1250);
             showToast(`${completedEncounter.success} · +${reward.petals} 花瓣`);
           }, reducedMotion ? 100 : 560);
         }
@@ -841,7 +861,7 @@ export default function Home() {
       playTone("wrong");
       showFlash("wrong");
     }
-  }, [addMissionBonus, bestCombo, combo, completedWords, correctHits, endlessMode, endlessWords, finishGame, fireflyResting, fireflyRound, isExplorationPrototype, level.mission, level.targetWords, mistakes, phase, playTone, recordKeyAttempt, reducedMotion, rhythmHits, showFlash, showToast, speakEncouragement, target, targetLabel, typed, updateProgress, word, worldStatus.distance]);
+  }, [addMissionBonus, bestCombo, combo, completedWords, correctHits, endlessMode, endlessWords, finishGame, fireflyResting, fireflyRound, isExplorationPrototype, level.mission, level.targetWords, mistakes, phase, playCinematic, playTone, recordKeyAttempt, reducedMotion, rhythmHits, showFlash, showToast, speakEncouragement, target, targetLabel, typed, updateProgress, word, worldStatus.distance]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -927,7 +947,7 @@ export default function Home() {
   };
 
   return (
-    <main className={`magic-game phase-${phase} level-${level.id} mission-${level.mission} ${isExplorationPrototype ? "exploration-active" : ""} ${flash ? `flash-${flash}` : ""} ${combo >= 10 ? "combo-bright" : combo >= 5 ? "combo-awake" : ""} ${isFever ? "fever-mode" : ""} ${largeText ? "child-text-large" : ""} ${highContrast ? "high-contrast" : ""}`}>
+    <main className={`magic-game phase-${phase} level-${level.id} mission-${level.mission} ${isExplorationPrototype ? "exploration-active" : ""} ${flash ? `flash-${flash}` : ""} ${combo >= 10 ? "combo-bright" : combo >= 5 ? "combo-awake" : ""} ${isFever ? "fever-mode" : ""} ${reducedMotion ? "reduced-motion" : ""} ${largeText ? "child-text-large" : ""} ${highContrast ? "high-contrast" : ""}`}>
       {phase === "lobby" ? <div className="garden-stage lobby-scene-fallback" aria-hidden="true" /> : (
         <Suspense fallback={<div className="garden-stage garden-loading" aria-hidden="true"><span>✦</span></div>}>
           {isExplorationPrototype ? (
@@ -964,16 +984,26 @@ export default function Home() {
         </Suspense>
       )}
       {phase !== "lobby" && !isExplorationPrototype && (
-        <div className="character-cast" aria-hidden="true">
-          <span className="anqi-character"><Image src="/characters/anqi-v2.webp" alt="" width={575} height={1100} draggable={false} priority unoptimized /></span>
-          <span className="lumi-character"><Image src="/characters/lumi-v2.webp" alt="" width={312} height={760} draggable={false} unoptimized /></span>
-          <span className="flower-character"><Image src="/characters/flower-spirit-v2.webp" alt="" width={644} height={520} draggable={false} unoptimized /></span>
-          <i className="spell-ray" />
-          <i className="world-response" />
+        <div className="bichon-character-cast" aria-hidden="true">
+          <div className="bichon-action-image" />
+          <span className="bichon-action-ripple"><i /><i /><i /></span>
+          <span className="bichon-motion-trails"><i /><i /><i /><i /></span>
         </div>
       )}
       <div className="cinematic-vignette" aria-hidden="true" />
       <div className="petal petal-a" aria-hidden="true" /><div className="petal petal-b" aria-hidden="true" /><div className="petal petal-c" aria-hidden="true" />
+      {flash === "word" && !reducedMotion && <div className="epic-word-reaction" aria-hidden="true"><span /><span /><span />{Array.from({ length: 18 }, (_, index) => <i key={index} />)}</div>}
+      {cinematicMoment && (() => {
+        const copy = CINEMATIC_COPY[cinematicMoment.kind];
+        return (
+          <section key={cinematicMoment.nonce} className={`bichon-cinematic cinematic-${cinematicMoment.kind}`} aria-live="polite" aria-label={copy.title}>
+            <div className="bichon-cinematic-image" />
+            <div className="cinematic-speed-lines">{Array.from({ length: 12 }, (_, index) => <i key={index} />)}</div>
+            <div className="bichon-cinematic-copy"><small>{copy.kicker}</small><h2>{copy.title}</h2><p>{copy.detail}</p><span><i /> LIVE ADVENTURE</span></div>
+            <div className="cinematic-letterbox cinematic-letterbox-top" /><div className="cinematic-letterbox cinematic-letterbox-bottom" />
+          </section>
+        );
+      })()}
 
       <header className="game-topbar">
         <button className="brand-lockup" onClick={returnToLobby} aria-label="返回安琪打字机首页">

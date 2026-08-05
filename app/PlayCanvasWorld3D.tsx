@@ -318,10 +318,14 @@ export function PlayCanvasWorld3D(props: PlayCanvasWorld3DProps) {
     const reactionRoot = new pc.Entity("WorldReactionBurst");
     reactionRoot.enabled = false;
     app.root.addChild(reactionRoot);
+    const reactionRings = Array.from({ length: 3 }, (_, index) => {
+      const entity = primitive(reactionRoot, `WorldShockwave-${index}`, "cylinder", [0, -0.48 + index * 0.035, 0], [0.08, 0.016, 0.08], index === 1 ? petalSurface : beamSurface, false);
+      return { entity, delay: index * 0.11 };
+    });
     const burstParticles = Array.from({ length: quality === "精细" ? 28 : 16 }, (_, index) => {
       const entity = primitive(reactionRoot, `RewardSpark-${index}`, "sphere", [0, 0, 0], [0.055, 0.055, 0.055], index % 3 === 0 ? petalSurface : moteSurface, false);
       const angle = (index / (quality === "精细" ? 28 : 16)) * Math.PI * 2;
-      return { entity, direction: new pc.Vec3(Math.cos(angle) * (0.8 + seeded(index + 710)), 0.55 + seeded(index + 730) * 1.2, Math.sin(angle) * (0.8 + seeded(index + 750))) };
+      return { entity, direction: new pc.Vec3(Math.cos(angle) * (1.45 + seeded(index + 710) * 1.4), 0.85 + seeded(index + 730) * 2.2, Math.sin(angle) * (1.45 + seeded(index + 750) * 1.4)) };
     });
     let burstAge = 2;
 
@@ -341,6 +345,7 @@ export function PlayCanvasWorld3D(props: PlayCanvasWorld3DProps) {
     avatar.setPosition(...BLOSSOM_TRAIL_LEVEL.spawn);
     app.root.addChild(avatar);
     let avatarVisual: pc.Entity | null = null;
+    let avatarVisualBaseY = 0;
     let currentAnimation = "";
     const playAnimation = (name: "idle" | "run" | "jump" | "sniff" | "celebrate") => {
       if (currentAnimation === name || !avatarVisual?.animation) return;
@@ -364,6 +369,9 @@ export function PlayCanvasWorld3D(props: PlayCanvasWorld3DProps) {
       const model = container.instantiateModelEntity({ castShadows: quality === "精细", receiveShadows: true });
       model.name = "AnqiBichonGLB";
       model.setLocalEulerAngles(0, 0, 0);
+      model.setLocalScale(1.28, 1.28, 1.28);
+      avatarVisualBaseY = 0.19;
+      model.setLocalPosition(0, avatarVisualBaseY, 0);
       const animations = (container as pc.ContainerResource & { animations: pc.Asset[] }).animations ?? [];
       if (animations.length > 0) model.addComponent("animation", { assets: animations, speed: 1, activate: true, loop: true });
       avatar.addChild(model);
@@ -382,6 +390,7 @@ export function PlayCanvasWorld3D(props: PlayCanvasWorld3DProps) {
     let lastCompletedWords = liveRef.current.completedWords;
     let lastCheckpoint = -1;
     let celebrateUntil = 0;
+    let cameraImpact = 0;
     const cameraPosition = new pc.Vec3();
     const desiredCamera = new pc.Vec3();
     const lookTarget = new pc.Vec3();
@@ -478,11 +487,13 @@ export function PlayCanvasWorld3D(props: PlayCanvasWorld3DProps) {
       }
       if (live.completedWords !== lastCompletedWords) {
         lastCompletedWords = live.completedWords;
-        celebrateUntil = elapsed + 0.82;
+        celebrateUntil = elapsed + 1.25;
+        cameraImpact = live.reducedMotion ? 0 : 1;
         reactionRoot.setPosition(avatar.getPosition().x, avatar.getPosition().y + 0.55, avatar.getPosition().z);
         reactionRoot.enabled = true;
         burstAge = 0;
         burstParticles.forEach(({ entity }) => entity.setLocalPosition(0, 0, 0));
+        reactionRings.forEach(({ entity }) => entity.setLocalScale(0.08, 0.016, 0.08));
         playAnimation("celebrate");
       }
 
@@ -544,7 +555,7 @@ export function PlayCanvasWorld3D(props: PlayCanvasWorld3DProps) {
 
       if (avatarVisual) {
         const visualBounce = live.reducedMotion ? 0 : moving && grounded ? Math.abs(Math.sin(elapsed * 10.5)) * 0.026 : Math.sin(elapsed * 1.7) * 0.008;
-        avatarVisual.setLocalPosition(0, visualBounce, 0);
+        avatarVisual.setLocalPosition(0, avatarVisualBaseY + visualBounce, 0);
       }
       playAnimation(elapsed < celebrateUntil ? "celebrate" : !grounded ? "jump" : moving ? "run" : elapsed % 10 > 7.5 ? "sniff" : "idle");
       stepTimer += moving && grounded ? delta : 0;
@@ -609,6 +620,12 @@ export function PlayCanvasWorld3D(props: PlayCanvasWorld3DProps) {
           entity.setLocalPosition(burstDirection.x * travel, burstDirection.y * travel - burstAge * burstAge * 0.7, burstDirection.z * travel);
           const sparkle = Math.max(0.02, (1 - burstAge / 1.05) * (0.055 + (index % 4) * 0.008));
           entity.setLocalScale(sparkle, sparkle, sparkle);
+        });
+        reactionRings.forEach(({ entity, delay }) => {
+          const ringAge = Math.max(0, burstAge - delay);
+          const ringScale = 0.08 + ringAge * 5.4;
+          entity.setLocalScale(ringScale, 0.016, ringScale);
+          entity.setLocalEulerAngles(0, ringAge * 46, 0);
         });
       } else if (reactionRoot.enabled) {
         reactionRoot.enabled = false;
@@ -678,7 +695,10 @@ export function PlayCanvasWorld3D(props: PlayCanvasWorld3DProps) {
       const cameraSettings = BLOSSOM_TRAIL_LEVEL.camera;
       const cameraBob = live.reducedMotion ? 0 : moving && grounded ? Math.sin(elapsed * 10.5) * 0.035 : Math.sin(elapsed * 0.68) * 0.018;
       const cameraDrift = live.reducedMotion ? 0 : Math.sin(elapsed * 0.22) * 0.055;
-      desiredCamera.set(avatarPosition.x * 0.3 + cameraDrift, avatarPosition.y + cameraSettings.height + cameraBob, avatarPosition.z + cameraSettings.distance);
+      const impactX = cameraImpact > 0 ? Math.sin(elapsed * 38) * cameraImpact * 0.12 : 0;
+      const impactY = cameraImpact > 0 ? Math.cos(elapsed * 31) * cameraImpact * 0.07 : 0;
+      cameraImpact = Math.max(0, cameraImpact - delta * 2.9);
+      desiredCamera.set(avatarPosition.x * 0.3 + cameraDrift + impactX, avatarPosition.y + cameraSettings.height + cameraBob + impactY, avatarPosition.z + cameraSettings.distance - cameraImpact * 0.22);
       cameraPosition.lerp(camera.getPosition(), desiredCamera, 1 - Math.exp(-delta * (live.reducedMotion ? 12 : 6.4)));
       camera.setPosition(cameraPosition);
       lookTarget.set(avatarPosition.x, avatarPosition.y + 0.46, avatarPosition.z - cameraSettings.lookAhead);

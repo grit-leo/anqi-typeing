@@ -7,6 +7,7 @@ import {
   CylinderGeometry,
   Euler,
   Group,
+  IcosahedronGeometry,
   Mesh,
   MeshPhysicalMaterial,
   MeshStandardMaterial,
@@ -78,8 +79,28 @@ const coatTip = new MeshPhysicalMaterial({
   sheenColor: new Color(0xffffff),
   sheenRoughness: 0.9,
 });
+const warmFur = new MeshPhysicalMaterial({
+  name: "WarmEarAndPawFur",
+  color: 0xe8ddce,
+  roughness: 1,
+  metalness: 0,
+  sheen: 0.16,
+  sheenColor: new Color(0xfff5e8),
+  sheenRoughness: 0.96,
+});
+const curlFur = new MeshPhysicalMaterial({
+  name: "IndividualCurlLayer",
+  color: 0xf8f3e9,
+  roughness: 1,
+  metalness: 0,
+  sheen: 0.28,
+  sheenColor: new Color(0xffffff),
+  sheenRoughness: 0.92,
+});
 const dark = new MeshStandardMaterial({ name: "EyesAndNose", color: 0x171719, roughness: 0.32 });
 const eyeGlint = new MeshStandardMaterial({ name: "EyeReflection", color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.18, roughness: 0.1 });
+const mouth = new MeshStandardMaterial({ name: "Mouth", color: 0x2a1717, roughness: 0.72 });
+const tongue = new MeshStandardMaterial({ name: "Tongue", color: 0x9d5957, roughness: 0.82 });
 const leather = new MeshPhysicalMaterial({ name: "AnqiRose", color: 0x9b5e54, roughness: 0.82, metalness: 0.02 });
 const brass = new MeshStandardMaterial({ name: "CollarBrass", color: 0xb89254, roughness: 0.54, metalness: 0.38 });
 
@@ -94,17 +115,50 @@ function mesh(parent, name, geometry, material, position = [0, 0, 0], scale = [1
   return item;
 }
 
+const curlGeometry = new IcosahedronGeometry(0.052, 2);
+
+function seeded(index) {
+  const value = Math.sin(index * 79.317 + 11.73) * 43758.5453;
+  return value - Math.floor(value);
+}
+
+function addFurCurls(parent, prefix, count, radii, center = [0, 0, 0], exclude = () => false) {
+  for (let index = 0; index < count; index += 1) {
+    const y = 1 - ((index + 0.5) / count) * 2;
+    const radius = Math.sqrt(Math.max(0, 1 - y * y));
+    const theta = index * Math.PI * (3 - Math.sqrt(5));
+    const direction = new Vector3(Math.cos(theta) * radius, y, Math.sin(theta) * radius);
+    if (exclude(direction)) continue;
+    const curl = mesh(
+      parent,
+      `${prefix}${index}`,
+      curlGeometry,
+      index % 5 === 0 ? warmFur : curlFur,
+      [
+        center[0] + direction.x * radii[0],
+        center[1] + direction.y * radii[1],
+        center[2] + direction.z * radii[2],
+      ],
+    );
+    const base = 0.62 + seeded(index + count * 3) * 0.34;
+    curl.scale.set(base * (0.9 + Math.abs(direction.x) * 0.16), base * (0.78 + Math.abs(direction.y) * 0.18), base);
+    curl.quaternion.setFromUnitVectors(new Vector3(0, 1, 0), direction);
+    curl.castShadow = false;
+  }
+}
+
 // Long torso, visible brisket and tucked waist establish a believable small-dog silhouette.
 const body = new Group();
 body.name = "Body";
 body.position.set(0, 0.02, -0.12);
 rig.add(body);
-const torso = mesh(body, "Torso", new CapsuleGeometry(0.33, 0.55, 12, 28), fur, [0, 0, 0], [1.04, 1, 0.98]);
+const torso = mesh(body, "Torso", new CapsuleGeometry(0.34, 0.46, 12, 28), fur, [0, 0, 0], [1.04, 1, 0.98]);
 torso.rotation.x = Math.PI / 2;
-const torsoTips = mesh(body, "FurShellBody", new CapsuleGeometry(0.34, 0.56, 10, 24), coatTip, [0, 0.004, 0], [1.04, 1, 0.98]);
+const torsoTips = mesh(body, "FurShellBody", new CapsuleGeometry(0.352, 0.475, 10, 24), coatTip, [0, 0.004, 0], [1.04, 1, 0.98]);
 torsoTips.rotation.x = Math.PI / 2;
-mesh(body, "Brisket", new SphereGeometry(0.35, 28, 20), deepFur, [0, 0.01, 0.39], [1.03, 1.1, 0.73]);
-mesh(body, "Waist", new SphereGeometry(0.3, 26, 18), fur, [0, 0.025, -0.46], [0.98, 0.86, 0.72]);
+mesh(body, "Brisket", new SphereGeometry(0.35, 28, 20), deepFur, [0, 0.01, 0.35], [1.03, 1.1, 0.73]);
+mesh(body, "Waist", new SphereGeometry(0.31, 26, 18), fur, [0, 0.025, -0.39], [1, 0.88, 0.78]);
+addFurCurls(body, "BodyCurl", 42, [0.37, 0.33, 0.55], [0, 0.025, -0.02], (direction) => direction.y < -0.72);
 
 const neck = mesh(rig, "Neck", new CapsuleGeometry(0.24, 0.2, 10, 22), deepFur, [0, 0.28, 0.3], [1.06, 1, 0.9]);
 neck.rotation.x = -0.38;
@@ -112,15 +166,20 @@ neck.rotation.x = -0.38;
 // Everything facial is parented to the head, so sniffing and looking feel anatomical.
 const head = new Group();
 head.name = "Head";
-head.position.set(0, 0.59, 0.42);
+head.position.set(0, 0.61, 0.39);
 rig.add(head);
-mesh(head, "Skull", new SphereGeometry(0.36, 34, 26), fur, [0, 0, 0], [1.06, 1.02, 0.92]);
-mesh(head, "FurShellHead", new SphereGeometry(0.371, 30, 23), coatTip, [0, 0.004, -0.002], [1.06, 1.02, 0.92]);
-mesh(head, "Crown", new SphereGeometry(0.25, 28, 20), fur, [0, 0.25, -0.025], [1.18, 0.62, 0.93]);
-mesh(head, "Muzzle", new SphereGeometry(0.18, 26, 18), deepFur, [0, -0.08, 0.3], [1.18, 0.67, 0.92]);
+mesh(head, "Skull", new SphereGeometry(0.37, 34, 26), fur, [0, 0, 0], [1.07, 1.04, 0.95]);
+mesh(head, "FurShellHead", new SphereGeometry(0.382, 30, 23), coatTip, [0, 0.004, -0.002], [1.07, 1.04, 0.95]);
+mesh(head, "Crown", new SphereGeometry(0.26, 28, 20), fur, [0, 0.255, -0.025], [1.2, 0.66, 0.96]);
+mesh(head, "Muzzle", new SphereGeometry(0.18, 26, 18), deepFur, [0, -0.08, 0.31], [1.2, 0.68, 0.94]);
+mesh(head, "CheekL", new SphereGeometry(0.115, 20, 14), fur, [-0.115, -0.085, 0.285], [1.08, 0.86, 0.78]);
+mesh(head, "CheekR", new SphereGeometry(0.115, 20, 14), fur, [0.115, -0.085, 0.285], [1.08, 0.86, 0.78]);
 mesh(head, "Chin", new SphereGeometry(0.12, 20, 14), fur, [0, -0.18, 0.27], [1.05, 0.68, 0.88]);
 const nose = mesh(head, "Nose", new SphereGeometry(0.057, 22, 16), dark, [0, -0.045, 0.455], [1.16, 0.76, 0.74]);
 nose.rotation.x = -0.08;
+mesh(head, "Smile", new SphereGeometry(0.064, 18, 12), mouth, [0, -0.135, 0.401], [1.02, 0.42, 0.52]);
+mesh(head, "Tongue", new SphereGeometry(0.035, 16, 10), tongue, [0, -0.166, 0.431], [0.82, 0.52, 0.48]);
+addFurCurls(head, "HeadCurl", 58, [0.395, 0.39, 0.37], [0, 0.015, -0.01], (direction) => direction.z > 0.42 && direction.y < 0.52 && Math.abs(direction.x) < 0.72);
 
 for (const x of [-0.135, 0.135]) {
   const side = x < 0 ? "L" : "R";
@@ -137,9 +196,9 @@ for (const x of [-0.31, 0.31]) {
   ear.position.set(x, 0.02, -0.02);
   ear.rotation.z = x < 0 ? 0.14 : -0.14;
   head.add(ear);
-  const earCoat = mesh(ear, `EarCoat${side}`, new CapsuleGeometry(0.105, 0.27, 9, 20), deepFur, [x < 0 ? -0.02 : 0.02, -0.12, -0.01], [0.92, 1.08, 0.72]);
+  const earCoat = mesh(ear, `EarCoat${side}`, new CapsuleGeometry(0.11, 0.28, 9, 20), warmFur, [x < 0 ? -0.02 : 0.02, -0.12, -0.01], [0.94, 1.08, 0.76]);
   earCoat.rotation.z = x < 0 ? -0.12 : 0.12;
-  mesh(ear, `EarTip${side}`, new SphereGeometry(0.115, 20, 14), fur, [x < 0 ? -0.045 : 0.045, -0.29, 0], [0.92, 1.12, 0.72]);
+  mesh(ear, `EarTip${side}`, new SphereGeometry(0.12, 20, 14), warmFur, [x < 0 ? -0.045 : 0.045, -0.3, 0], [0.96, 1.14, 0.76]);
 }
 
 // Jointed legs keep the body lifted off the ground and give the gait real weight.
@@ -155,22 +214,24 @@ for (const [name, x, z] of legDefinitions) {
   const upper = mesh(leg, `${name}Upper`, new CapsuleGeometry(0.095, 0.16, 8, 18), deepFur, [0, -0.09, 0], [1.02, 1, 0.96]);
   upper.rotation.x = name.includes("B") ? -0.1 : 0.06;
   mesh(leg, `${name}Lower`, new CapsuleGeometry(0.083, 0.19, 8, 18), fur, [0, -0.31, name.includes("B") ? 0.025 : 0], [1, 1, 0.94]);
-  mesh(leg, `${name}Paw`, new SphereGeometry(0.115, 22, 15), deepFur, [0, -0.48, 0.055], [1.04, 0.58, 1.38]);
+  mesh(leg, `${name}Paw`, new SphereGeometry(0.12, 22, 15), warmFur, [0, -0.48, 0.055], [1.06, 0.62, 1.38]);
+  addFurCurls(leg, `${name}Curl`, 7, [0.105, 0.22, 0.105], [0, -0.29, 0.02], (direction) => direction.y > 0.78 || direction.y < -0.76);
 }
 
 // A continuous curved tail replaces the old stack of toy-like fur balls.
 const tail = new Group();
 tail.name = "Tail";
-tail.position.set(0.17, 0.14, -0.64);
+tail.position.set(0, 0.16, -0.59);
 const tailCurve = new CatmullRomCurve3([
   new Vector3(0, 0, 0),
-  new Vector3(0.11, 0.16, -0.04),
-  new Vector3(0.13, 0.36, 0.03),
-  new Vector3(0.04, 0.5, 0.17),
-  new Vector3(-0.09, 0.45, 0.29),
+  new Vector3(0.09, 0.16, -0.02),
+  new Vector3(0.12, 0.38, 0.06),
+  new Vector3(0.05, 0.54, 0.21),
+  new Vector3(-0.06, 0.5, 0.38),
 ]);
-mesh(tail, "TailCoat", new TubeGeometry(tailCurve, 32, 0.083, 10, false), fur);
-mesh(tail, "TailTip", new SphereGeometry(0.12, 22, 16), fur, [-0.09, 0.45, 0.29], [0.92, 1.08, 0.92]);
+mesh(tail, "TailCoat", new TubeGeometry(tailCurve, 32, 0.09, 10, false), warmFur);
+mesh(tail, "TailTip", new SphereGeometry(0.14, 22, 16), curlFur, [-0.06, 0.5, 0.38], [1, 1.12, 1]);
+addFurCurls(tail, "TailCurl", 12, [0.12, 0.18, 0.14], [-0.04, 0.46, 0.31], (direction) => direction.y < -0.62);
 rig.add(tail);
 
 // A restrained leather collar reads as a real pet accessory, not a costume.
