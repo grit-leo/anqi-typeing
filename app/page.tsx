@@ -45,12 +45,12 @@ import {
   type WorldDiscovery,
   type ExplorationEncounterId,
 } from "./exploration-engine";
-import type { ExplorationWorldStatus } from "./ExplorationWorld3D";
+import type { ExplorationWorldStatus } from "./PlayCanvasWorld3D";
 import { getKeyMovement, KeyboardCoach } from "./KeyboardCoach";
 import { ParentReport } from "./ParentReport";
 
 const MagicGarden3D = lazy(() => import("./MagicGarden3D").then((module) => ({ default: module.MagicGarden3D })));
-const ExplorationWorld3D = lazy(() => import("./ExplorationWorld3D").then((module) => ({ default: module.ExplorationWorld3D })));
+const ExplorationWorld3D = lazy(() => import("./PlayCanvasWorld3D").then((module) => ({ default: module.PlayCanvasWorld3D })));
 
 type Phase = "lobby" | "exploring" | "playing" | "paused" | "complete";
 type Flash = "correct" | "wrong" | "word" | null;

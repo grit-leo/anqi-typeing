@@ -44,13 +44,15 @@ test("server-renders the full-screen Magic Garden commercial game", async () => 
 });
 
 test("includes real WebGL, large-game systems, touch input, safety and persistence", async () => {
-  const [page, hub, keyboard, parentReport, stage, exploration, explorationEngine, engine, css, layout, packageJson, bichonModel] = await Promise.all([
+  const [page, hub, keyboard, parentReport, stage, exploration, playCanvas, levelSchema, explorationEngine, engine, css, layout, packageJson, bichonModel] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/AdventureHub.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/KeyboardCoach.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/ParentReport.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/MagicGarden3D.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/ExplorationWorld3D.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/PlayCanvasWorld3D.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/level-schema.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/exploration-engine.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/game-engine.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
@@ -91,7 +93,7 @@ test("includes real WebGL, large-game systems, touch input, safety and persisten
   assert.match(page, /anqi-magic-garden-settings/);
   assert.match(page, /highContrast/);
   assert.match(page, /lazy\(\(\) => import\("\.\/MagicGarden3D"\)/);
-  assert.match(page, /lazy\(\(\) => import\("\.\/ExplorationWorld3D"\)/);
+  assert.match(page, /lazy\(\(\) => import\("\.\/PlayCanvasWorld3D"\)/);
   assert.match(page, /feedback=\{flash\}/);
   assert.match(page, /phase === "exploring"/);
   assert.match(page, /beginExplorationEncounter/);
@@ -203,6 +205,19 @@ test("includes real WebGL, large-game systems, touch input, safety and persisten
   assert.match(exploration, /onMovementAudio/);
   assert.match(exploration, /renderer\.shadowMap\.enabled = qualityMode/);
   assert.match(exploration, /Math\.exp\(-delta/);
+  assert.match(playCanvas, /new pc\.Application/);
+  assert.match(playCanvas, /instantiateModelEntity/);
+  assert.match(playCanvas, /anqi-bichon\.glb/);
+  assert.match(playCanvas, /screenToWorld/);
+  assert.match(playCanvas, /EndlessLevel-streamed-chunks/);
+  assert.match(playCanvas, /mobile-explore-controls/);
+  assert.match(playCanvas, /ResizeObserver/);
+  assert.match(playCanvas, /webglcontextlost/);
+  assert.match(levelSchema, /schemaVersion: 1/);
+  assert.match(levelSchema, /BLOSSOM_TRAIL_LEVEL/);
+  assert.match(levelSchema, /encounters:/);
+  assert.match(levelSchema, /discoveries:/);
+  assert.match(levelSchema, /visibleChunks/);
   assert.match(explorationEngine, /rune-gate/);
   assert.match(explorationEngine, /moon-bridge/);
   assert.match(explorationEngine, /wish-beacon/);
@@ -251,6 +266,7 @@ test("includes real WebGL, large-game systems, touch input, safety and persisten
   assert.match(css, /Focused child HUD/);
   assert.match(css, /\.explore-focus-card/);
   assert.match(css, /\.typing-focus-strip/);
+  assert.match(css, /\.playcanvas-world/);
   assert.equal(bichonModel.subarray(0, 4).toString("utf8"), "glTF");
   assert.ok(bichonModel.byteLength > 300_000);
   const gltfJsonLength = bichonModel.readUInt32LE(12);
@@ -262,5 +278,6 @@ test("includes real WebGL, large-game systems, touch input, safety and persisten
   assert.match(layout, /bichon-garden-real-v1\.webp/);
   assert.match(layout, /summary_large_image/);
   assert.match(layout, /lang="zh-CN"/);
+  assert.match(packageJson, /"playcanvas"/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
 });

@@ -483,6 +483,12 @@ html,body{background:#111915}
 .word-burst{color:#f0e5cf;font-style:normal;letter-spacing:.06em;text-shadow:0 4px 18px rgba(0,0,0,.42)}.word-burst span{color:#a8c1ab}
 .game-toast,.hub-toast{border-color:rgba(234,230,217,.2);border-radius:9px;background:rgba(15,25,21,.9);color:#f0eee7;box-shadow:0 12px 28px rgba(0,0,0,.28)}
 
+.playcanvas-world{background:linear-gradient(180deg,rgba(31,51,42,.04),rgba(20,34,28,.2)),url('/worlds/blossom-panoramic-real-v2.webp') center/cover no-repeat}
+.playcanvas-canvas{display:block;width:100%;height:100%;touch-action:none;animation:sceneReveal .65s ease both}
+.playcanvas-loading{position:absolute;z-index:5;left:50%;top:50%;transform:translate(-50%,-50%);min-width:220px;display:flex;align-items:center;justify-content:center;gap:11px;padding:12px 16px;border:1px solid rgba(236,230,215,.24);border-radius:10px;background:rgba(15,25,21,.88);color:#e9e5da;font-size:12px;font-weight:750;box-shadow:0 16px 36px rgba(0,0,0,.28);backdrop-filter:blur(12px)}
+.playcanvas-loading i{width:17px;height:17px;border:2px solid rgba(235,228,211,.22);border-top-color:#d5c29b;border-radius:50%;animation:pcLoad .8s linear infinite}
+@keyframes pcLoad{to{transform:rotate(360deg)}}
+
 .modal-backdrop{background:rgba(7,12,9,.7)}
 .modal-card{border-color:rgba(232,229,216,.2);border-radius:14px;background:rgba(21,31,27,.98);box-shadow:0 32px 80px rgba(0,0,0,.52)}
 .modal-orbit,.tutorial-steps i,.fallback-adventure-card>span{border-radius:50%;background:#d9cdb7;color:#25352d;box-shadow:none}
