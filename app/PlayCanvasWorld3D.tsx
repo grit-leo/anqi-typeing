@@ -122,13 +122,15 @@ function makeTree(parent: pc.Entity, index: number, x: number, z: number, foliag
   return tree;
 }
 
-function makeEncounterMarker(parent: pc.Entity, id: string, position: Point3, stone: pc.Material, accent: pc.Material) {
+function makeEncounterMarker(parent: pc.Entity, id: string, position: Point3, stone: pc.Material, accent: pc.Material, beamSurface: pc.Material) {
   const marker = new pc.Entity(`Encounter-${id}`);
   marker.setLocalPosition(...position);
   primitive(marker, "StoneBase", "cylinder", [0, 0.3, 0], [0.72, 0.3, 0.72], stone);
   primitive(marker, "Post", "cylinder", [0, 1.08, 0], [0.12, 0.78, 0.12], stone);
   const signal = primitive(marker, "Signal", "sphere", [0, 1.9, 0], [0.28, 0.28, 0.28], accent, false);
   signal.addComponent("light", { type: "omni", color: color("#d2bd94"), intensity: 0.6, range: 4, castShadows: false });
+  primitive(marker, "GuideBeam", "cylinder", [0, 2.55, 0], [0.065, 1.55, 0.065], beamSurface, false);
+  primitive(marker, "PulseHalo", "cylinder", [0, 0.68, 0], [1.08, 0.018, 1.08], beamSurface, false);
   parent.addChild(marker);
   return marker;
 }
@@ -228,9 +230,15 @@ export function PlayCanvasWorld3D(props: PlayCanvasWorld3DProps) {
     const leaves = material(BLOSSOM_TRAIL_LEVEL.palette.foliage, { roughness: 1 });
     const accent = material(BLOSSOM_TRAIL_LEVEL.palette.accent, { roughness: 0.62, emissive: "#5d4c35" });
     const discoverySurface = material("#a9b9a5", { roughness: 0.75, emissive: "#293f32" });
+    const beamSurface = material("#e5d1a7", { roughness: 0.35, emissive: "#8e7953", opacity: 0.4 });
+    const petalSurface = material("#e6b4b3", { roughness: 0.72, emissive: "#6c3d3d", opacity: 0.86 });
+    const moteSurface = material("#f0d89d", { roughness: 0.42, emissive: "#9b7c3f", opacity: 0.82 });
+    const mistSurface = material("#d7ded6", { roughness: 1, opacity: 0.12 });
+    const dustSurface = material("#d6c8ab", { roughness: 1, opacity: 0.34 });
 
     const storyRoot = new pc.Entity("StoryLevel-blossom-trail-pc");
     app.root.addChild(storyRoot);
+    const windTrees: Array<{ entity: pc.Entity; phase: number; strength: number }> = [];
     primitive(storyRoot, "Ground", "box", [0, -0.18, -12], [20, 0.18, 40], ground, false);
     for (let index = 0; index < 20; index += 1) {
       const z = 5.2 - index * 1.55;
@@ -243,7 +251,8 @@ export function PlayCanvasWorld3D(props: PlayCanvasWorld3DProps) {
       const side = index % 2 === 0 ? -1 : 1;
       const x = side * (4.6 + seeded(index) * 4.2);
       const z = 6 - seeded(index + 30) * 38;
-      makeTree(storyRoot, index, x, z, leaves, trunk);
+      const tree = makeTree(storyRoot, index, x, z, leaves, trunk);
+      windTrees.push({ entity: tree, phase: seeded(index + 310) * Math.PI * 2, strength: 0.42 + seeded(index + 320) * 0.7 });
     }
     for (let index = 0; index < 22; index += 1) {
       const side = index % 2 === 0 ? -1 : 1;
@@ -252,7 +261,7 @@ export function PlayCanvasWorld3D(props: PlayCanvasWorld3DProps) {
 
     const encounterEntities = new Map<ExplorationEncounterId, pc.Entity>();
     BLOSSOM_TRAIL_LEVEL.encounters.forEach((node) => {
-      encounterEntities.set(node.id, makeEncounterMarker(storyRoot, node.id, node.position, stone, accent));
+      encounterEntities.set(node.id, makeEncounterMarker(storyRoot, node.id, node.position, stone, accent, beamSurface));
     });
     const discoveryEntities = new Map<WorldDiscoveryId, pc.Entity>();
     BLOSSOM_TRAIL_LEVEL.discoveries.forEach((node) => {
@@ -278,12 +287,50 @@ export function PlayCanvasWorld3D(props: PlayCanvasWorld3DProps) {
       }
       for (let treeIndex = 0; treeIndex < (quality === "精细" ? 8 : 5); treeIndex += 1) {
         const side = treeIndex % 2 === 0 ? -1 : 1;
-        makeTree(chunk, 200 + index * 12 + treeIndex, side * (5 + seeded(index * 20 + treeIndex) * 3.2), 9 - treeIndex * 2.8, chunkFoliage, trunk);
+        const treeSeed = 200 + index * 12 + treeIndex;
+        const tree = makeTree(chunk, treeSeed, side * (5 + seeded(index * 20 + treeIndex) * 3.2), 9 - treeIndex * 2.8, chunkFoliage, trunk);
+        windTrees.push({ entity: tree, phase: seeded(treeSeed + 310) * Math.PI * 2, strength: 0.42 + seeded(treeSeed + 320) * 0.7 });
       }
       chunks.push(chunk);
       endlessRoot.addChild(chunk);
     }
-    const endlessStation = makeEncounterMarker(endlessRoot, "endless", [0, 0, -18], stone, accent);
+    const endlessStation = makeEncounterMarker(endlessRoot, "endless", [0, 0, -18], stone, accent, beamSurface);
+
+    const atmosphereRoot = new pc.Entity("LivingAtmosphere");
+    app.root.addChild(atmosphereRoot);
+    const petals = Array.from({ length: quality === "精细" ? 34 : 18 }, (_, index) => {
+      const entity = primitive(atmosphereRoot, `WindPetal-${index}`, "sphere", [0, 0, 0], [0.055, 0.018, 0.09], petalSurface, false);
+      entity.setPosition((seeded(index + 410) - 0.5) * 15, 0.7 + seeded(index + 430) * 5.8, 6 - seeded(index + 450) * 31);
+      entity.setEulerAngles(seeded(index + 470) * 180, seeded(index + 490) * 180, seeded(index + 510) * 180);
+      return { entity, phase: seeded(index + 530) * Math.PI * 2, speed: 0.28 + seeded(index + 550) * 0.34 };
+    });
+    const motes = Array.from({ length: quality === "精细" ? 18 : 10 }, (_, index) => {
+      const entity = primitive(atmosphereRoot, `WarmMote-${index}`, "sphere", [0, 0, 0], [0.035, 0.035, 0.035], moteSurface, false);
+      entity.setPosition((seeded(index + 610) - 0.5) * 13, 0.5 + seeded(index + 630) * 3.4, 4 - seeded(index + 650) * 28);
+      return { entity, phase: seeded(index + 670) * Math.PI * 2 };
+    });
+    const mistBanks = Array.from({ length: 4 }, (_, index) => {
+      const entity = primitive(atmosphereRoot, `MovingMist-${index}`, "sphere", [0, 0, 0], [4.2 + index * 0.55, 0.12, 1.05 + index * 0.2], mistSurface, false);
+      entity.setPosition(-7 + index * 4.6, 0.2 + index * 0.035, -3 - index * 8.5);
+      return { entity, phase: index * 1.7 };
+    });
+
+    const reactionRoot = new pc.Entity("WorldReactionBurst");
+    reactionRoot.enabled = false;
+    app.root.addChild(reactionRoot);
+    const burstParticles = Array.from({ length: quality === "精细" ? 28 : 16 }, (_, index) => {
+      const entity = primitive(reactionRoot, `RewardSpark-${index}`, "sphere", [0, 0, 0], [0.055, 0.055, 0.055], index % 3 === 0 ? petalSurface : moteSurface, false);
+      const angle = (index / (quality === "精细" ? 28 : 16)) * Math.PI * 2;
+      return { entity, direction: new pc.Vec3(Math.cos(angle) * (0.8 + seeded(index + 710)), 0.55 + seeded(index + 730) * 1.2, Math.sin(angle) * (0.8 + seeded(index + 750))) };
+    });
+    let burstAge = 2;
+
+    const dustPuffs = Array.from({ length: quality === "精细" ? 10 : 6 }, (_, index) => {
+      const entity = primitive(app.root, `FootstepDust-${index}`, "sphere", [0, 0, 0], [0.08, 0.025, 0.08], dustSurface, false);
+      entity.enabled = false;
+      return { entity, age: 2, phase: seeded(index + 810) * Math.PI * 2 };
+    });
+    let nextDust = 0;
 
     const destination = new pc.Entity("ClickDestination");
     primitive(destination, "Destination", "cylinder", [0, 0, 0], [0.42, 0.018, 0.42], accent, false);
@@ -334,6 +381,7 @@ export function PlayCanvasWorld3D(props: PlayCanvasWorld3DProps) {
     let lastEndlessMode = liveRef.current.endlessMode;
     let lastCompletedWords = liveRef.current.completedWords;
     let lastCheckpoint = -1;
+    let celebrateUntil = 0;
     const cameraPosition = new pc.Vec3();
     const desiredCamera = new pc.Vec3();
     const lookTarget = new pc.Vec3();
@@ -430,7 +478,12 @@ export function PlayCanvasWorld3D(props: PlayCanvasWorld3DProps) {
       }
       if (live.completedWords !== lastCompletedWords) {
         lastCompletedWords = live.completedWords;
-        playAnimation(live.feedback === "word" ? "celebrate" : "idle");
+        celebrateUntil = elapsed + 0.82;
+        reactionRoot.setPosition(avatar.getPosition().x, avatar.getPosition().y + 0.55, avatar.getPosition().z);
+        reactionRoot.enabled = true;
+        burstAge = 0;
+        burstParticles.forEach(({ entity }) => entity.setLocalPosition(0, 0, 0));
+        playAnimation("celebrate");
       }
 
       let moving = false;
@@ -489,12 +542,76 @@ export function PlayCanvasWorld3D(props: PlayCanvasWorld3DProps) {
         avatar.setPosition(position);
       }
 
-      if (!live.reducedMotion && avatarVisual && !moving && grounded) avatarVisual.setLocalPosition(0, Math.sin(elapsed * 1.7) * 0.006, 0);
-      playAnimation(!grounded ? "jump" : moving ? "run" : elapsed % 10 > 7.5 ? "sniff" : "idle");
+      if (avatarVisual) {
+        const visualBounce = live.reducedMotion ? 0 : moving && grounded ? Math.abs(Math.sin(elapsed * 10.5)) * 0.026 : Math.sin(elapsed * 1.7) * 0.008;
+        avatarVisual.setLocalPosition(0, visualBounce, 0);
+      }
+      playAnimation(elapsed < celebrateUntil ? "celebrate" : !grounded ? "jump" : moving ? "run" : elapsed % 10 > 7.5 ? "sniff" : "idle");
       stepTimer += moving && grounded ? delta : 0;
       if (moving && grounded && stepTimer > 0.31) {
         stepTimer = 0;
         live.onMovementAudio("step");
+        if (!live.reducedMotion) {
+          const puff = dustPuffs[nextDust % dustPuffs.length];
+          nextDust += 1;
+          puff.age = 0;
+          puff.entity.enabled = true;
+          puff.entity.setPosition(avatar.getPosition().x + (seeded(nextDust + 830) - 0.5) * 0.28, 0.08, avatar.getPosition().z + 0.28);
+        }
+      }
+
+      if (!live.reducedMotion) {
+        windTrees.forEach(({ entity, phase, strength }, index) => {
+          const gust = Math.sin(elapsed * 0.72 + phase) * strength + Math.sin(elapsed * 0.19 + index) * 0.28;
+          entity.setLocalEulerAngles(gust * 0.42, 0, gust * 0.74);
+        });
+        petals.forEach(({ entity, phase, speed }, index) => {
+          const next = entity.getPosition().clone();
+          next.y -= speed * delta;
+          next.x += (0.22 + Math.sin(elapsed * 0.9 + phase) * 0.16) * delta;
+          next.z += Math.cos(elapsed * 0.47 + phase) * delta * 0.08;
+          entity.rotate(delta * (34 + index % 5), delta * (22 + index % 7), delta * 16);
+          if (next.y < 0.16 || next.z > avatar.getPosition().z + 9) {
+            next.set(avatar.getPosition().x - 8 + seeded(index + Math.floor(elapsed) + 870) * 16, 4.2 + seeded(index + 890) * 2.8, avatar.getPosition().z - 8 - seeded(index + 910) * 23);
+          }
+          entity.setPosition(next);
+        });
+        motes.forEach(({ entity, phase }, index) => {
+          entity.setLocalScale(0.028 + Math.sin(elapsed * 2.1 + phase) * 0.012, 0.028 + Math.sin(elapsed * 2.1 + phase) * 0.012, 0.028 + Math.sin(elapsed * 2.1 + phase) * 0.012);
+          const next = entity.getPosition().clone();
+          next.x += Math.sin(elapsed * 0.5 + phase) * delta * 0.035;
+          next.y += Math.cos(elapsed * 0.7 + phase) * delta * 0.018;
+          if (next.z > avatar.getPosition().z + 7) next.z = avatar.getPosition().z - 22 - index * 0.3;
+          entity.setPosition(next);
+        });
+        mistBanks.forEach(({ entity, phase }, index) => {
+          const worldZ = avatar.getPosition().z - 4 - index * 7.5;
+          entity.setPosition(Math.sin(elapsed * 0.085 + phase) * 7.5, 0.18 + index * 0.03, worldZ);
+        });
+      }
+
+      dustPuffs.forEach((puff) => {
+        if (!puff.entity.enabled) return;
+        puff.age += delta;
+        const size = 0.08 + puff.age * 0.24;
+        puff.entity.setLocalScale(size, Math.max(0.018, size * 0.24), size);
+        const next = puff.entity.getPosition().clone();
+        next.x += Math.sin(puff.phase) * delta * 0.18;
+        next.y += delta * 0.025;
+        puff.entity.setPosition(next);
+        if (puff.age > 0.62) puff.entity.enabled = false;
+      });
+
+      if (burstAge < 1.05) {
+        burstAge += delta;
+        burstParticles.forEach(({ entity, direction: burstDirection }, index) => {
+          const travel = burstAge * (1.2 - burstAge * 0.36);
+          entity.setLocalPosition(burstDirection.x * travel, burstDirection.y * travel - burstAge * burstAge * 0.7, burstDirection.z * travel);
+          const sparkle = Math.max(0.02, (1 - burstAge / 1.05) * (0.055 + (index % 4) * 0.008));
+          entity.setLocalScale(sparkle, sparkle, sparkle);
+        });
+      } else if (reactionRoot.enabled) {
+        reactionRoot.enabled = false;
       }
 
       if (live.endlessMode) {
@@ -532,8 +649,22 @@ export function PlayCanvasWorld3D(props: PlayCanvasWorld3DProps) {
         entity.enabled = index >= getCompletedEncounterCount(live.completedWords);
         const signal = entity.findByName("Signal");
         if (signal && !live.reducedMotion) signal.setLocalScale(0.28 + Math.sin(elapsed * 2.4 + index) * 0.025, 0.28 + Math.sin(elapsed * 2.4 + index) * 0.025, 0.28 + Math.sin(elapsed * 2.4 + index) * 0.025);
+        const guideBeam = entity.findByName("GuideBeam");
+        if (guideBeam && !live.reducedMotion) guideBeam.setLocalScale(0.055 + Math.sin(elapsed * 1.8 + index) * 0.018, 1.55, 0.055 + Math.sin(elapsed * 1.8 + index) * 0.018);
+        const halo = entity.findByName("PulseHalo");
+        if (halo && !live.reducedMotion) {
+          const pulse = 0.82 + ((elapsed * 0.42 + index * 0.27) % 1) * 0.72;
+          halo.setLocalScale(pulse, 0.018, pulse);
+        }
       });
-      discoveryEntities.forEach((entity, id) => { entity.enabled = !live.discoveredIds.includes(id); });
+      discoveryEntities.forEach((entity, id) => {
+        entity.enabled = !live.discoveredIds.includes(id);
+        if (entity.enabled && !live.reducedMotion) {
+          const index = BLOSSOM_TRAIL_LEVEL.discoveries.findIndex((node) => node.id === id);
+          entity.setLocalPosition(entity.getLocalPosition().x, BLOSSOM_TRAIL_LEVEL.discoveries[index].position[1] + Math.sin(elapsed * 1.45 + index) * 0.12, entity.getLocalPosition().z);
+          entity.rotate(0, delta * 22, 0);
+        }
+      });
 
       if (!live.endlessMode) {
         BLOSSOM_TRAIL_LEVEL.checkpoints.forEach((checkpoint, index) => {
@@ -545,12 +676,22 @@ export function PlayCanvasWorld3D(props: PlayCanvasWorld3DProps) {
       }
 
       const cameraSettings = BLOSSOM_TRAIL_LEVEL.camera;
-      desiredCamera.set(avatarPosition.x * 0.3, avatarPosition.y + cameraSettings.height, avatarPosition.z + cameraSettings.distance);
+      const cameraBob = live.reducedMotion ? 0 : moving && grounded ? Math.sin(elapsed * 10.5) * 0.035 : Math.sin(elapsed * 0.68) * 0.018;
+      const cameraDrift = live.reducedMotion ? 0 : Math.sin(elapsed * 0.22) * 0.055;
+      desiredCamera.set(avatarPosition.x * 0.3 + cameraDrift, avatarPosition.y + cameraSettings.height + cameraBob, avatarPosition.z + cameraSettings.distance);
       cameraPosition.lerp(camera.getPosition(), desiredCamera, 1 - Math.exp(-delta * (live.reducedMotion ? 12 : 6.4)));
       camera.setPosition(cameraPosition);
       lookTarget.set(avatarPosition.x, avatarPosition.y + 0.46, avatarPosition.z - cameraSettings.lookAhead);
       camera.lookAt(lookTarget);
       destination.rotate(0, live.reducedMotion ? 0 : delta * 42, 0);
+      if (destination.enabled && !live.reducedMotion) {
+        const destinationPulse = 0.86 + Math.sin(elapsed * 4.2) * 0.14;
+        destination.setLocalScale(destinationPulse, 1, destinationPulse);
+      }
+      if (!live.reducedMotion) {
+        sunlight.setEulerAngles(52 + Math.sin(elapsed * 0.055) * 1.4, -28 + Math.sin(elapsed * 0.04) * 2.2, 18);
+        if (sunlight.light) sunlight.light.intensity = 1.5 + Math.sin(elapsed * 0.18) * 0.08;
+      }
 
       statusTimer += delta;
       if (statusTimer > 0.45) {
@@ -607,6 +748,7 @@ export function PlayCanvasWorld3D(props: PlayCanvasWorld3DProps) {
       {!ready && <div className="playcanvas-loading" aria-live="polite"><i /><span>正在准备自然探索场景</span></div>}
       {props.mode === "explore" && (
         <>
+          <div className="world-motion-status" aria-hidden="true"><i /><span>实时世界</span><b>风、光影与花瓣正在变化</b></div>
           <div className={`interaction-prompt ${nearbyEncounter || discovery ? "visible" : ""}`} aria-live="polite">
             <span>{discovery ? discovery.kind === "npc" ? "友" : "藏" : nearbyEncounter ? "题" : "路"}</span>
             <div><small>{discovery ? discovery.kind === "npc" ? "遇见自然伙伴" : "发现隐藏记录" : nearbyEncounter ? props.endlessMode ? `发现随机任务 · 第 ${nearbyEncounter.number} 区` : `发现打字任务 · 第 ${nearbyEncounter.number}/3 站` : props.endlessMode ? "点击远处路面，安琪会自动前往" : "沿自然步道探索"}</small><strong>{discovery?.name ?? nearbyEncounter?.title ?? (props.endlessMode ? "寻找下一座任务碑" : "寻找沿途的打字任务")}</strong></div>

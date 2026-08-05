@@ -1013,7 +1013,7 @@ export default function Home() {
         <section className="settings-popover" aria-label="游戏设置">
           <div><strong>儿童辅助设置</strong><button onClick={closeSettings} aria-label="关闭设置">×</button></div>
           <label><span>沉浸声音与鼓励<small>环境声、脚步、按键和中文语音鼓励</small></span><input type="checkbox" checked={soundOn} onChange={(event) => setSoundOn(event.target.checked)} /></label>
-          <label><span>柔和动画<small>减少镜头与粒子运动</small></span><input type="checkbox" checked={reducedMotion} onChange={(event) => setReducedMotion(event.target.checked)} /></label>
+          <label><span>减少动态效果<small>需要更安静的画面时，关闭风、粒子和镜头运动</small></span><input type="checkbox" checked={reducedMotion} onChange={(event) => setReducedMotion(event.target.checked)} /></label>
           <label><span>指法优先模式<small>第一关不限时，准确掌握后再提速</small></span><input type="checkbox" checked={beginnerMode} onChange={(event) => setBeginnerMode(event.target.checked)} /></label>
           <label><span>大字模式<small>放大提示和学习信息</small></span><input type="checkbox" checked={largeText} onChange={(event) => setLargeText(event.target.checked)} /></label>
           <label><span>高对比按键<small>增强目标键、文字与焦点边界</small></span><input type="checkbox" checked={highContrast} onChange={(event) => setHighContrast(event.target.checked)} /></label>
@@ -1040,6 +1040,11 @@ export default function Home() {
       {phase === "lobby" && (
         <section className="lobby-screen" aria-label="星愿花园主菜单">
           <div className="lobby-keyart" aria-hidden="true" />
+          <div className="lobby-atmosphere" aria-hidden="true">
+            <span className="lobby-sunbeam" />
+            {Array.from({ length: 12 }, (_, index) => <i key={index} />)}
+            <b /><b /><b /><b />
+          </div>
           <div className="lobby-copy">
             <span className="season-chip"><i /> 为 9 岁孩子设计 · 准确、专注、可持续</span>
             <p className="lobby-eyebrow">ANQI TYPER · OUTDOOR LEARNING</p>

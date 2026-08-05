@@ -489,6 +489,26 @@ html,body{background:#111915}
 .playcanvas-loading i{width:17px;height:17px;border:2px solid rgba(235,228,211,.22);border-top-color:#d5c29b;border-radius:50%;animation:pcLoad .8s linear infinite}
 @keyframes pcLoad{to{transform:rotate(360deg)}}
 
+/* Living-world motion pass --------------------------------------------- */
+.phase-lobby .lobby-keyart{will-change:background-position;animation:lobbyCameraDrift 18s ease-in-out infinite alternate}
+.phase-lobby .lobby-keyart::before{content:"";position:absolute;z-index:1;inset:-20% -10%;background:linear-gradient(112deg,transparent 31%,rgba(255,242,205,.08) 43%,rgba(255,246,218,.22) 49%,rgba(255,242,205,.06) 56%,transparent 67%);mix-blend-mode:screen;filter:blur(7px);transform:translateX(-14%);animation:lobbySunSweep 9s ease-in-out infinite alternate;pointer-events:none}
+.phase-lobby .lobby-keyart::after{content:"";display:block;position:absolute;z-index:2;left:-8%;right:-8%;bottom:-5%;height:34%;background:radial-gradient(ellipse at 22% 68%,rgba(226,232,219,.18),transparent 45%),radial-gradient(ellipse at 66% 72%,rgba(220,229,217,.16),transparent 48%);filter:blur(18px);opacity:.72;animation:lobbyMistTravel 14s ease-in-out infinite alternate;pointer-events:none}
+.lobby-atmosphere{position:absolute;z-index:0;inset:-76px 0 0;overflow:hidden;pointer-events:none}
+.lobby-atmosphere .lobby-sunbeam{position:absolute;right:7%;top:-16%;width:34%;height:88%;background:linear-gradient(160deg,rgba(255,244,209,.16),transparent 67%);filter:blur(22px);transform:skewX(-13deg);mix-blend-mode:screen;animation:lobbyBeamBreathe 6.5s ease-in-out infinite alternate}
+.lobby-atmosphere i{position:absolute;top:-8%;width:8px;height:14px;border-radius:82% 12% 78% 18%;background:linear-gradient(145deg,#d3b29c,#8b7767);opacity:.58;filter:drop-shadow(0 2px 3px rgba(24,31,25,.2));animation:fieldLeafDrift 10s linear infinite;will-change:transform}
+.lobby-atmosphere i:nth-of-type(1){left:8%;animation-delay:-3s;animation-duration:13s}.lobby-atmosphere i:nth-of-type(2){left:17%;animation-delay:-8s;animation-duration:15s}.lobby-atmosphere i:nth-of-type(3){left:29%;animation-delay:-1s;animation-duration:12s}.lobby-atmosphere i:nth-of-type(4){left:41%;animation-delay:-10s;animation-duration:17s}.lobby-atmosphere i:nth-of-type(5){left:52%;animation-delay:-5s;animation-duration:14s}.lobby-atmosphere i:nth-of-type(6){left:61%;animation-delay:-12s;animation-duration:18s}.lobby-atmosphere i:nth-of-type(7){left:69%;animation-delay:-6s;animation-duration:13.5s}.lobby-atmosphere i:nth-of-type(8){left:77%;animation-delay:-2s;animation-duration:16s}.lobby-atmosphere i:nth-of-type(9){left:84%;animation-delay:-9s;animation-duration:12.5s}.lobby-atmosphere i:nth-of-type(10){left:91%;animation-delay:-4s;animation-duration:15.5s}.lobby-atmosphere i:nth-of-type(11){left:35%;animation-delay:-7s;animation-duration:19s}.lobby-atmosphere i:nth-of-type(12){left:73%;animation-delay:-14s;animation-duration:20s}
+.lobby-atmosphere b{position:absolute;width:4px;height:4px;border-radius:50%;background:#efe0b7;box-shadow:0 0 9px 3px rgba(239,224,183,.44);opacity:.42;animation:fieldMote 4.2s ease-in-out infinite alternate}.lobby-atmosphere b:nth-of-type(1){left:55%;top:31%}.lobby-atmosphere b:nth-of-type(2){left:68%;top:45%;animation-delay:-1.4s}.lobby-atmosphere b:nth-of-type(3){left:82%;top:27%;animation-delay:-2.6s}.lobby-atmosphere b:nth-of-type(4){left:90%;top:59%;animation-delay:-.7s}
+.playcanvas-world{will-change:background-position,background-size;animation:worldPlateDrift 20s ease-in-out infinite alternate}
+.world-motion-status{position:absolute;z-index:5;left:22px;bottom:94px;display:flex;align-items:center;gap:7px;min-height:34px;padding:7px 10px;border:1px solid rgba(232,228,213,.2);border-radius:9px;background:rgba(13,24,19,.58);color:#dce3dd;box-shadow:0 10px 24px rgba(0,0,0,.18);backdrop-filter:blur(9px);pointer-events:none}.world-motion-status i{width:7px;height:7px;border-radius:50%;background:#cfc096;box-shadow:0 0 0 4px rgba(207,192,150,.12);animation:livingPulse 1.8s ease-in-out infinite}.world-motion-status span{font-size:11px;font-weight:800}.world-motion-status b{color:#aebbb2;font-size:10px;font-weight:580}
+@keyframes lobbyCameraDrift{0%{background-position:0 0,0 0,64% 50%}100%{background-position:0 0,0 0,70% 47%}}
+@keyframes lobbySunSweep{0%{opacity:.42;transform:translateX(-18%) rotate(-1deg)}100%{opacity:.82;transform:translateX(15%) rotate(2deg)}}
+@keyframes lobbyMistTravel{0%{transform:translate3d(-4%,0,0) scale(1)}100%{transform:translate3d(5%,-4%,0) scale(1.07)}}
+@keyframes lobbyBeamBreathe{0%{opacity:.38;transform:skewX(-13deg) translateX(-3%)}100%{opacity:.78;transform:skewX(-10deg) translateX(5%)}}
+@keyframes fieldLeafDrift{0%{transform:translate3d(0,-12vh,0) rotate(0deg)}32%{transform:translate3d(34px,27vh,0) rotate(130deg)}68%{transform:translate3d(-22px,69vh,0) rotate(260deg)}100%{transform:translate3d(48px,116vh,0) rotate(410deg)}}
+@keyframes fieldMote{0%{opacity:.24;transform:translate3d(-4px,5px,0) scale(.75)}100%{opacity:.78;transform:translate3d(8px,-12px,0) scale(1.25)}}
+@keyframes worldPlateDrift{0%{background-position:48% 50%;background-size:auto 104%}100%{background-position:53% 47%;background-size:auto 109%}}
+@keyframes livingPulse{0%,100%{opacity:.48;transform:scale(.82)}50%{opacity:1;transform:scale(1.15)}}
+
 .modal-backdrop{background:rgba(7,12,9,.7)}
 .modal-card{border-color:rgba(232,229,216,.2);border-radius:14px;background:rgba(21,31,27,.98);box-shadow:0 32px 80px rgba(0,0,0,.52)}
 .modal-orbit,.tutorial-steps i,.fallback-adventure-card>span{border-radius:50%;background:#d9cdb7;color:#25352d;box-shadow:none}
@@ -504,6 +524,7 @@ html,body{background:#111915}
   .lobby-screen{inset:68px 0 0}
   .lobby-keyart{inset:-68px 0 0;background:linear-gradient(180deg,rgba(9,16,12,.3),rgba(9,16,12,.62) 45%,rgba(9,16,12,.9)),url('/worlds/bichon-garden-real-v1.webp') 64% top/auto 58% no-repeat,#17251d}
   .lobby-copy{padding-top:clamp(170px,27vh,245px)}
+  .world-motion-status{display:none}
   .adventure-hub{border-radius:12px;grid-template-rows:84px 1fr}
   .hub-nav{grid-template-rows:repeat(2,42px)}
   .hub-nav button{min-height:42px}
