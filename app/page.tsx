@@ -385,9 +385,19 @@ export default function Home() {
 
   const playCinematic = useCallback((kind: CinematicKind, duration = 1900) => {
     if (cinematicTimer.current) clearTimeout(cinematicTimer.current);
+    const actualDuration = reducedMotion ? 420 : duration;
     setCinematicMoment({ kind, nonce: Date.now() });
-    cinematicTimer.current = setTimeout(() => setCinematicMoment(null), reducedMotion ? 420 : duration);
+    cinematicTimer.current = setTimeout(() => setCinematicMoment(null), actualDuration);
+    return actualDuration;
   }, [reducedMotion]);
+
+  const skipCinematic = useCallback(() => {
+    if (cinematicTimer.current) clearTimeout(cinematicTimer.current);
+    cinematicTimer.current = null;
+    setCinematicMoment(null);
+    if (startedAt.current > Date.now()) startedAt.current = Date.now();
+    if (phase === "playing") window.setTimeout(() => mobileInputRef.current?.focus({ preventScroll: true }), 60);
+  }, [phase]);
 
   const finishGame = useCallback((snapshot?: SessionSnapshot) => {
     if (finishingRef.current) return;
@@ -415,7 +425,7 @@ export default function Home() {
   useEffect(() => {
     if (phase !== "playing" && phase !== "exploring") return;
     const timer = window.setInterval(() => {
-      const nextElapsed = (Date.now() - startedAt.current) / 1000;
+      const nextElapsed = Math.max(0, (Date.now() - startedAt.current) / 1000);
       setElapsed(nextElapsed);
       if (level.mission === "firefly") {
         const round = Math.min(3, Math.floor(nextElapsed / FIREFLY_ROUND_SECONDS) + 1);
@@ -432,7 +442,7 @@ export default function Home() {
   }, [calmSession, finishGame, level.mission, missionDuration, phase, showToast]);
 
   const beginSession = useCallback(() => {
-    playCinematic("launch", 2050);
+    const introDuration = playCinematic("launch", 2050);
     setEndlessMode(false);
     setEndlessWords(0);
     setWorldStatus({ distance: 0, zone: 1, biome: "樱风原野", movingByClick: false, quality: "精细" });
@@ -456,11 +466,11 @@ export default function Home() {
     sessionKeyStatsRef.current = {};
     setAdaptiveStats({});
     keyShownAtRef.current = performance.now();
-    startedAt.current = Date.now();
+    startedAt.current = Date.now() + introDuration;
     const exploreFirst = level.id === "petal-gate" && !reviewModeRef.current;
     setPausedFrom(exploreFirst ? "exploring" : "playing");
     setPhase(exploreFirst ? "exploring" : "playing");
-    if (!exploreFirst) window.setTimeout(() => mobileInputRef.current?.focus({ preventScroll: true }), 120);
+    if (!exploreFirst) window.setTimeout(() => mobileInputRef.current?.focus({ preventScroll: true }), introDuration + 120);
   }, [level.id, playCinematic]);
 
   const startEndlessWorld = useCallback(() => {
@@ -489,10 +499,10 @@ export default function Home() {
     sessionKeyStatsRef.current = {};
     setAdaptiveStats({});
     keyShownAtRef.current = performance.now();
-    startedAt.current = Date.now();
+    const introDuration = playCinematic("endless", 2050);
+    startedAt.current = Date.now() + introDuration;
     setPausedFrom("exploring");
     setPhase("exploring");
-    playCinematic("endless", 2050);
     showToast("无限世界已开启 · 点击路面即可自动前往");
   }, [playCinematic, showToast]);
 
@@ -746,7 +756,7 @@ export default function Home() {
   }, [playTone]);
 
   const handleKey = useCallback((key: string) => {
-    if (phase !== "playing" || finishingRef.current || !target || fireflyResting) return;
+    if (phase !== "playing" || cinematicMoment || finishingRef.current || !target || fireflyResting) return;
     const reactionMs = performance.now() - keyShownAtRef.current;
     const outcome = evaluateTypingKey(word, typed.length, key);
     if (outcome === "correct" || outcome === "complete") {
@@ -861,11 +871,17 @@ export default function Home() {
       playTone("wrong");
       showFlash("wrong");
     }
-  }, [addMissionBonus, bestCombo, combo, completedWords, correctHits, endlessMode, endlessWords, finishGame, fireflyResting, fireflyRound, isExplorationPrototype, level.mission, level.targetWords, mistakes, phase, playCinematic, playTone, recordKeyAttempt, reducedMotion, rhythmHits, showFlash, showToast, speakEncouragement, target, targetLabel, typed, updateProgress, word, worldStatus.distance]);
+  }, [addMissionBonus, bestCombo, cinematicMoment, combo, completedWords, correctHits, endlessMode, endlessWords, finishGame, fireflyResting, fireflyRound, isExplorationPrototype, level.mission, level.targetWords, mistakes, phase, playCinematic, playTone, recordKeyAttempt, reducedMotion, rhythmHits, showFlash, showToast, speakEncouragement, target, targetLabel, typed, updateProgress, word, worldStatus.distance]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (cinematicMoment) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        if (event.key === "Enter" || event.key === "Escape" || event.key === " ") skipCinematic();
+        return;
+      }
       if (settingsOpen && event.key === "Escape") {
         event.preventDefault();
         closeSettings();
@@ -898,7 +914,7 @@ export default function Home() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [closeSettings, handleKey, helpOpen, parentReportOpen, pauseGame, phase, profileOpen, requestStart, resumeGame, settingsOpen, tutorialOpen]);
+  }, [cinematicMoment, closeSettings, handleKey, helpOpen, parentReportOpen, pauseGame, phase, profileOpen, requestStart, resumeGame, settingsOpen, skipCinematic, tutorialOpen]);
 
   useEffect(() => {
     const onVisibility = () => {
@@ -952,7 +968,7 @@ export default function Home() {
         <Suspense fallback={<div className="garden-stage garden-loading" aria-hidden="true"><span>✦</span></div>}>
           {isExplorationPrototype ? (
             <ExplorationWorld3D
-              mode={phase === "exploring" ? "explore" : phase === "playing" ? "encounter" : phase === "complete" ? "complete" : "paused"}
+              mode={cinematicMoment ? "paused" : phase === "exploring" ? "explore" : phase === "playing" ? "encounter" : phase === "complete" ? "complete" : "paused"}
               completedWords={completedWords}
               endlessMode={endlessMode}
               endlessWords={endlessWords}
@@ -1000,6 +1016,7 @@ export default function Home() {
             <div className="bichon-cinematic-image" />
             <div className="cinematic-speed-lines">{Array.from({ length: 12 }, (_, index) => <i key={index} />)}</div>
             <div className="bichon-cinematic-copy"><small>{copy.kicker}</small><h2>{copy.title}</h2><p>{copy.detail}</p><span><i /> LIVE ADVENTURE</span></div>
+            <button className="cinematic-skip" type="button" onClick={skipCinematic}>跳过 <kbd>Enter</kbd></button>
             <div className="cinematic-letterbox cinematic-letterbox-top" /><div className="cinematic-letterbox cinematic-letterbox-bottom" />
           </section>
         );

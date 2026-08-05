@@ -117,6 +117,9 @@ test("includes real WebGL, large-game systems, touch input, safety and persisten
   assert.match(page, /CINEMATIC_COPY/);
   assert.match(page, /bichon-cinematic/);
   assert.match(page, /epic-word-reaction/);
+  assert.match(page, /skipCinematic/);
+  assert.match(page, /startedAt\.current = Date\.now\(\) \+ introDuration/);
+  assert.match(page, /cinematicMoment \? "paused"/);
   assert.match(css, /flash-correct \.spell-ray/);
   assert.match(css, /flash-word \.flower-character/);
   assert.match(css, /flash-wrong \.lumi-character/);
