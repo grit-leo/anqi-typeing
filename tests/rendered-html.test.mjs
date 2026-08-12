@@ -111,6 +111,10 @@ test("includes real WebGL, large-game systems, touch input, safety and persisten
   assert.match(page, /importBackup/);
   assert.match(page, /resetCurrentProfile/);
   assert.match(page, /SpeechSynthesisUtterance/);
+  assert.match(page, /chooseChildFriendlyVoice/);
+  assert.match(page, /setAmbientSpeechDucking/);
+  assert.match(page, /试听安琪/);
+  assert.match(page, /伙伴、教练和 NPC 会使用不同的语气/);
   assert.match(page, /totalReactionMs/);
   assert.match(page, /沉浸声音与鼓励/);
   assert.match(page, /discoverWorldSecret/);

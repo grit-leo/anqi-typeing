@@ -47,6 +47,15 @@ import {
 import type { ExplorationWorldStatus } from "./PlayCanvasWorld3D";
 import { getKeyMovement, KeyboardCoach } from "./KeyboardCoach";
 import { ParentReport } from "./ParentReport";
+import {
+  CHILD_VOICE_STYLES,
+  chooseChildFriendlyVoice,
+  getChildVoiceProfile,
+  isChildVoiceStyle,
+  prepareChildSpeech,
+  type ChildVoiceRole,
+  type ChildVoiceStyle,
+} from "./voice-engine";
 
 const MagicGarden3D = lazy(() => import("./MagicGarden3D").then((module) => ({ default: module.MagicGarden3D })));
 const ExplorationWorld3D = lazy(() => import("./PlayCanvasWorld3D").then((module) => ({ default: module.PlayCanvasWorld3D })));
@@ -126,6 +135,8 @@ export default function Home() {
   const [newProfileName, setNewProfileName] = useState("");
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
   const [soundOn, setSoundOn] = useState(true);
+  const [voiceStyle, setVoiceStyle] = useState<ChildVoiceStyle>("playmate");
+  const [voiceLabel, setVoiceLabel] = useState("使用设备普通话声音");
   const [reducedMotion, setReducedMotion] = useState(false);
   const [beginnerMode, setBeginnerMode] = useState(true);
   const [largeText, setLargeText] = useState(false);
@@ -164,6 +175,10 @@ export default function Home() {
   const audioContextRef = useRef<AudioContext | null>(null);
   const ambientRef = useRef<{ noise: AudioBufferSourceNode; breeze: OscillatorNode; gain: GainNode } | null>(null);
   const lastSpeechAtRef = useRef(0);
+  const voiceListRef = useRef<SpeechSynthesisVoice[]>([]);
+  const speechTokenRef = useRef(0);
+  const speechStartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const speechActiveRef = useRef(false);
   const keyShownAtRef = useRef(0);
   const sessionRef = useRef<SessionSnapshot>({ correctHits: 0, mistakes: 0, completedWords: 0, bestCombo: 0, elapsed: 0 });
   const sessionKeyStatsRef = useRef<SessionKeyStats>({});
@@ -219,8 +234,9 @@ export default function Home() {
       setProgress(loadProgress(storedActive));
       const systemReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       try {
-        const saved = JSON.parse(window.localStorage.getItem(SETTINGS_KEY) ?? "{}") as Partial<{ soundOn: boolean; reducedMotion: boolean; beginnerMode: boolean; largeText: boolean; highContrast: boolean }>;
+        const saved = JSON.parse(window.localStorage.getItem(SETTINGS_KEY) ?? "{}") as Partial<{ soundOn: boolean; voiceStyle: ChildVoiceStyle; reducedMotion: boolean; beginnerMode: boolean; largeText: boolean; highContrast: boolean }>;
         setSoundOn(saved.soundOn ?? true);
+        setVoiceStyle(isChildVoiceStyle(saved.voiceStyle) ? saved.voiceStyle : "playmate");
         setReducedMotion(saved.reducedMotion ?? systemReducedMotion);
         setBeginnerMode(saved.beginnerMode ?? true);
         setLargeText(saved.largeText ?? false);
@@ -241,11 +257,27 @@ export default function Home() {
   useEffect(() => {
     if (!settingsHydrated) return;
     try {
-      window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ soundOn, reducedMotion, beginnerMode, largeText, highContrast }));
+      window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ soundOn, voiceStyle, reducedMotion, beginnerMode, largeText, highContrast }));
     } catch {
       // Accessibility preferences still apply to the current session.
     }
-  }, [beginnerMode, highContrast, largeText, reducedMotion, settingsHydrated, soundOn]);
+  }, [beginnerMode, highContrast, largeText, reducedMotion, settingsHydrated, soundOn, voiceStyle]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    const synthesis = window.speechSynthesis;
+    const refreshVoices = () => {
+      voiceListRef.current = synthesis.getVoices();
+      const selected = chooseChildFriendlyVoice(voiceListRef.current, voiceStyle, "anqi");
+      setVoiceLabel(selected ? `已匹配 · ${selected.name}` : "使用设备普通话声音");
+    };
+    const initialRefresh = window.setTimeout(refreshVoices, 0);
+    synthesis.addEventListener("voiceschanged", refreshVoices);
+    return () => {
+      window.clearTimeout(initialRefresh);
+      synthesis.removeEventListener("voiceschanged", refreshVoices);
+    };
+  }, [voiceStyle]);
 
   useEffect(() => {
     sessionRef.current = { correctHits, mistakes, completedWords, bestCombo, elapsed };
@@ -257,6 +289,9 @@ export default function Home() {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     if (parentHoldTimer.current) clearTimeout(parentHoldTimer.current);
     if (cinematicTimer.current) clearTimeout(cinematicTimer.current);
+    if (speechStartTimerRef.current) clearTimeout(speechStartTimerRef.current);
+    speechTokenRef.current += 1;
+    speechActiveRef.current = false;
     window.speechSynthesis?.cancel();
     ambientRef.current = null;
     void audioContextRef.current?.close();
@@ -334,7 +369,7 @@ export default function Home() {
       breezeGain.gain.value = 0.004;
       const gain = context.createGain();
       gain.gain.value = 0.0001;
-      gain.gain.exponentialRampToValueAtTime(0.018, context.currentTime + 1.1);
+      gain.gain.exponentialRampToValueAtTime(speechActiveRef.current ? 0.0045 : 0.018, context.currentTime + 1.1);
       noise.connect(filter);
       filter.connect(gain);
       breeze.connect(breezeGain);
@@ -348,19 +383,60 @@ export default function Home() {
     }
   }, [soundOn]);
 
-  const speakEncouragement = useCallback((message: string, urgent = false) => {
-    if (!soundOn || typeof window === "undefined" || !("speechSynthesis" in window)) return;
+  const setAmbientSpeechDucking = useCallback((ducked: boolean) => {
+    const context = audioContextRef.current;
+    const ambient = ambientRef.current;
+    if (!context || !ambient) return;
+    const now = context.currentTime;
+    ambient.gain.gain.cancelScheduledValues(now);
+    ambient.gain.gain.setTargetAtTime(ducked ? 0.0045 : 0.018, now, ducked ? 0.055 : 0.2);
+  }, []);
+
+  const speakEncouragement = useCallback((message: string, options: { role?: ChildVoiceRole; urgent?: boolean; force?: boolean } = {}) => {
+    if ((!soundOn && !options.force) || typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    const synthesis = window.speechSynthesis;
+    const role = options.role ?? "anqi";
+    const urgent = options.urgent ?? false;
     const now = Date.now();
-    if (!urgent && now - lastSpeechAtRef.current < 9000) return;
+    if (!urgent && (now - lastSpeechAtRef.current < 7000 || synthesis.speaking || synthesis.pending)) return;
     lastSpeechAtRef.current = now;
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(message);
-    utterance.lang = "zh-CN";
-    utterance.rate = 0.9;
-    utterance.pitch = 1.08;
-    utterance.volume = 0.62;
-    window.speechSynthesis.speak(utterance);
-  }, [soundOn]);
+    const wasBusy = synthesis.speaking || synthesis.pending;
+    if (speechStartTimerRef.current) clearTimeout(speechStartTimerRef.current);
+    const token = speechTokenRef.current + 1;
+    speechTokenRef.current = token;
+    if (urgent && wasBusy) synthesis.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(prepareChildSpeech(message, role));
+    const selectedVoice = chooseChildFriendlyVoice(voiceListRef.current.length ? voiceListRef.current : synthesis.getVoices(), voiceStyle, role);
+    const profile = getChildVoiceProfile(voiceStyle, role);
+    if (selectedVoice) utterance.voice = selectedVoice;
+    utterance.lang = selectedVoice?.lang ?? "zh-CN";
+    utterance.rate = profile.rate;
+    utterance.pitch = profile.pitch;
+    utterance.volume = profile.volume;
+    const finishSpeech = () => {
+      if (speechTokenRef.current !== token) return;
+      speechActiveRef.current = false;
+      setAmbientSpeechDucking(false);
+    };
+    utterance.onend = finishSpeech;
+    utterance.onerror = finishSpeech;
+    speechActiveRef.current = true;
+    setAmbientSpeechDucking(true);
+    speechStartTimerRef.current = window.setTimeout(() => {
+      if (speechTokenRef.current !== token) return;
+      try {
+        synthesis.speak(utterance);
+      } catch {
+        finishSpeech();
+      }
+    }, urgent && wasBusy ? 70 : 0);
+  }, [setAmbientSpeechDucking, soundOn, voiceStyle]);
+
+  const previewChildVoice = useCallback(() => {
+    setSoundOn(true);
+    speakEncouragement("嗨！我是安琪。准备好了吗？我们一起把字打准，再去发现新的小路！", { role: "anqi", urgent: true, force: true });
+  }, [speakEncouragement]);
 
   useEffect(() => {
     if (soundOn && (phase === "exploring" || phase === "playing")) startAmbient();
@@ -748,7 +824,7 @@ export default function Home() {
       playTone("collect");
     }
     showToast(`${discovery.message}${firstVisit ? ` · +${discovery.reward} 花瓣` : ""}`);
-    speakEncouragement(discovery.kind === "npc" ? `${discovery.name}说：${discovery.message}` : discovery.message, true);
+    speakEncouragement(discovery.kind === "npc" ? `${discovery.name}说：${discovery.message}` : discovery.message, { role: discovery.kind === "npc" ? "npc" : "anqi", urgent: true });
   }, [playTone, progress.discoveries, showToast, speakEncouragement, updateProgress]);
 
   const playMovementAudio = useCallback((kind: "step" | "jump" | "land") => {
@@ -797,7 +873,7 @@ export default function Home() {
         setAdaptiveStats({ ...sessionKeyStatsRef.current });
         showFlash("word");
         playTone("word");
-        if ((endlessMode ? nextEndlessWords : nextCompleted) % 5 === 0) speakEncouragement(nextBest >= 8 ? "太棒了，手指越来越稳！" : "很好，保持准确，继续前进！");
+        if ((endlessMode ? nextEndlessWords : nextCompleted) % 5 === 0) speakEncouragement(nextBest >= 8 ? "耶！你的手指越来越稳啦！" : "做得好！慢慢来，我们继续探险！", { role: "anqi" });
         if (!endlessMode && nextCompleted === 5 && !isExplorationPrototype) showToast("第一阶段完成 · 指法和节奏正在稳定");
         if (!endlessMode && nextCompleted === Math.ceil(level.targetWords / 2)) showToast("旅程过半 · 月兔为你加油");
         if (!endlessMode && level.mission === "guardian" && (nextCompleted === Math.ceil(level.targetWords / 3) || nextCompleted === Math.ceil(level.targetWords * 2 / 3))) showToast("护盾破裂 · Boss 进入下一阶段");
@@ -864,7 +940,7 @@ export default function Home() {
         if (next === 2) showToast(`${getKeyMovement(target)}，按完立即归位`);
         if (next >= 3) {
           showToast(`先看屏幕上的 ${targetLabel}，不要低头找键`);
-          speakEncouragement(`没关系，先找到 ${targetLabel}，慢慢按。`, true);
+          speakEncouragement(`没关系，先找到 ${targetLabel}，慢慢按。`, { role: "coach", urgent: true });
         }
         return next;
       });
@@ -1060,6 +1136,13 @@ export default function Home() {
         <section className="settings-popover" aria-label="游戏设置">
           <div><strong>儿童辅助设置</strong><button onClick={closeSettings} aria-label="关闭设置">×</button></div>
           <label><span>沉浸声音与鼓励<small>环境声、脚步、按键和中文语音鼓励</small></span><input type="checkbox" checked={soundOn} onChange={(event) => setSoundOn(event.target.checked)} /></label>
+          <div className="voice-settings">
+            <span><strong>安琪说话声音</strong><small>伙伴、教练和 NPC 会使用不同的语气</small></span>
+            <div className="voice-style-grid" role="group" aria-label="选择儿童语音风格">
+              {CHILD_VOICE_STYLES.map((style) => <button key={style.id} type="button" className={voiceStyle === style.id ? "active" : ""} aria-pressed={voiceStyle === style.id} onClick={() => setVoiceStyle(style.id)}><b>{style.name}</b><small>{style.description}</small></button>)}
+            </div>
+            <div className="voice-preview-row"><button type="button" onClick={previewChildVoice}>▶ 试听安琪</button><small aria-live="polite">{voiceLabel}</small></div>
+          </div>
           <label><span>减少动态效果<small>需要更安静的画面时，关闭风、粒子和镜头运动</small></span><input type="checkbox" checked={reducedMotion} onChange={(event) => setReducedMotion(event.target.checked)} /></label>
           <label><span>指法优先模式<small>第一关不限时，准确掌握后再提速</small></span><input type="checkbox" checked={beginnerMode} onChange={(event) => setBeginnerMode(event.target.checked)} /></label>
           <label><span>大字模式<small>放大提示和学习信息</small></span><input type="checkbox" checked={largeText} onChange={(event) => setLargeText(event.target.checked)} /></label>
