@@ -1,98 +1,60 @@
-# vinext-starter
+# 安琪打字机 · 花语岛
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+面向 10 岁左右儿童的 3D 打字学习游戏。用柔和的自然配色、可探索的小岛和比熊棉棉，把指法练习变成一段有反馈的小冒险。
 
-## Prerequisites
+## 启动
 
-- Node.js `>=22.13.0`
-
-## Quick Start
+需要 Node.js 22.13+。
 
 ```bash
 npm install
 npm run dev
-npm run build
 ```
 
-This starter does not use `wrangler.jsonc`.
+打开开发服务打印的地址，默认 http://localhost:3000 。Mac 上 localhost 可能监听 IPv6，请使用 localhost，不要强制替换为 127.0.0.1。
 
-## Included Shape
-
-- edit site code under `app/`
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
-
-## Workspace Auth Headers
-
-OpenAI workspace sites can read the current user's email from
-`oai-authenticated-user-email`.
-
-SIWC-authenticated workspace sites may also receive
-`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
-`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
-`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
-
-Treat the full name as optional and fall back to email when it is absent:
-
-```tsx
-import { headers } from "next/headers";
-
-export default async function Home() {
-  const requestHeaders = await headers();
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
+```bash
+npm test                         # 生产构建与全部测试
+npm run lint                     # ESLint
+npx tsc --noEmit --incremental false
 ```
 
-## Optional Dispatch-Owned ChatGPT Sign-In
+## 学习与玩法
 
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
-optional or required ChatGPT sign-in:
+- 4 座主题小岛、16 课：F/J → 基准排 → 上排 → 下排 → 大写和标点 → 数字 → 完整短句。
+- 每课 6 组练习，不限时；错误停留在原位并提示正确手指。准确率达到 90% 后开放下一课。
+- 彩色键盘提示手指分区，包含半角分号和数字；可以收起提示练习不看键盘。
+- 易错键温习只使用已经尝试过的字符，不通过温习跳过正式课程。
+- PC 探索界面铺满工作区，课程和成长记录通过顶部导航进入；“岛屿与旅程”集中选择区域与课程。
+- 练习镜头稳定对准当前任务，文字和指法放在同一条垂直视线上。常见笔记本高度下默认折叠虚拟键盘，可随时展开；无需依赖浏览器全屏。
+- 第一章是完整的溪边花园建设：每完成一组，长出一片花圃、铺一块桥板、挂一串风铃或点亮一盏灯。4 项建设各有 6 个步骤，成果永久保存在本机。
+- 建设成果与准确率解锁分开：认真完成的成果不会因打错或重练消失；达到 90% 才解锁下一课及纪念品。温习不跳过课程、不提前建设。
+- 直接点击草地移动比熊，点击字母路牌走向课程。移动路线避开小屋、池塘和未修完的小桥。
+- 拖动场景旋转，滚轮调整远近。风车、水波、云朵、蝴蝶、比熊步态和尾巴实时动画。
+- Esc 或离开窗口自动暂停。输入位置、错误计数和建设进度自动保存，刷新或“保存并回到小岛”后可继续；一次保留一段未完成的练习。练习累计约 10 分钟后提示休息。
+- “成长手账”显示真实练习记录、准确率、速度、按键熟练度和温习建议。
 
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send
-  anonymous visitors through Sign in with ChatGPT.
-- Use `chatGPTSignInPath(returnTo)` and `chatGPTSignOutPath(returnTo)` for
-  browser links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in
-  or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because
-  they depend on per-request identity headers.
+教学设计遵循基准排定位、十指分工与先准确后速度的原则，参考 [Typing.com 的指法说明](https://www.typing.com/blog/?p=221)。90% 解锁门槛是本游戏的课程规则，并非学习能力评估标准。
 
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the
-OAuth cookies, and identity header injection. Do not implement app routes for
-those reserved paths. Routes that do not import and call the helper remain
-anonymous-compatible.
+## 数据与边界
 
-SIWC establishes identity only; it does not prove workspace membership. Use the
-Sites hosting platform's access policy controls for workspace-wide restrictions,
-or enforce explicit server-side membership or allowlist checks.
+新课程使用浏览器本地存储 `anqi-island-learning-v1`，设置使用 `anqi-island-settings-v1`，建设成果和练习断点使用新增的 `anqi-island-journey-v1`。旧课程分数、解锁和花种保留；已通过的课程自动补齐对应建设成果。不同设备不自动同步。浏览器禁用存储时仍能练习，并会提示无法持久保存。
 
-Use SIWC for account pages, user-specific dashboards, saved records, and write
-actions tied to the current ChatGPT user. Leave public content anonymous.
+为后续适应性练习记录本机按键间隔样本和长停顿次数；首键、暂停后的首键、错误后的首键和超过 10 秒的间隔不计入。它们不是手指动作检测，也不能据此判断孩子是否低头。当前没有上传遥测或摄像头采集。
 
-## Useful Commands
+需要支持 WebGL 的现代浏览器，建议连接实体键盘。移动设备可以浏览地图和记录；系统软键盘不适合训练十指指法。3D 初始化失败时提供重试，练习内容仍可使用。
 
-- `npm run dev`: start local development
-- `npm run build`: verify the vinext build output
-- `npm test`: build the starter and verify its rendered loading skeleton
-- `npm run db:generate`: generate Drizzle migrations after schema changes
+音效通过 Web Audio 合成，不依赖网络语音，也不会自动朗读。可关闭音效、收起键盘提示、开启安静画面。
 
-## Learn More
+## 实现
 
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+- React 19 / TypeScript / vinext + Vite。
+- Three.js 实时 3D：程序化小岛、角色、地标、阴影、动画和点击寻路，不使用背景照片冒充场景。
+- `app/IslandGame.tsx`：界面与练习状态。
+- `app/island-engine.ts`：课程、学习记录、评分、温习、指法与寻路。
+- `app/island-journey.ts`：世界建设、旧记录迁移、校验后的断点恢复及学习测量基础。
+- `app/IslandScene.tsx`：三维场景、资源释放和角色动画。
+- `app/IslandKeyboard.tsx`：键盘提示。
+- `app/globals.css`：响应式界面。
+
+已有 Cloudflare Worker / D1 模板仍保留，当前学习进度不需要数据库。旧版引擎及其单元测试保留，新首页已切换到花语岛。
