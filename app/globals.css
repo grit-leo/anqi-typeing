@@ -271,6 +271,7 @@ svg { flex-shrink: 0; }
 .companion-view-tools .world-map-button { margin: 0; min-height: 44px; font-size: 16px; box-shadow: 0 3px 16px #38544610; }
 .companion-view-tools>span { color: #3a5e4c; background: #fffdf2d9; padding: 6px 10px; border-radius: 6px; font-size: 13px; }
 .companion-view-tools button[aria-pressed="true"] { background: #456e56; color: #fffdf2; }
+.story-entry { margin-top: 9px; background: #fff3d7df; border-color: #eddfb7; }
 .companion-angle-buttons { display: flex; gap: 6px; }.companion-angle-buttons button { background: #fffdf2df; border: 1px solid #d2d8cb; border-radius: 7px; padding: 9px 12px; font-size: 14px; color: #3a5e4c; }
 .companion-caption { position: absolute; left: 32px; top: 40px; pointer-events: none; color: #365744; }.companion-caption p { font-size: 11px; letter-spacing: .16em; }.companion-caption h2 { font-size: clamp(25px,3vw,37px); margin: 14px 0; font-weight: 600; }.companion-caption>span { font-size: 17px; line-height: 1.9; }.companion-caption small { display: block; margin-top: 22px; font-size: 13px; color: #7b8477; }
 .world-stage:has(.companion-caption)>.world-heading,.world-stage:has(.companion-caption)>.mission-card,.world-stage:has(.companion-caption)>.exploration-tools,.world-stage:has(.companion-caption)>.world-status { display: none; }

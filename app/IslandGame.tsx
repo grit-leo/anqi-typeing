@@ -5,7 +5,9 @@ import { CHAPTERS, LESSONS, STORAGE_KEY, emptyProgress, loadIslandProgress, loca
 import { JOURNEY_KEY, PROJECTS, emptyJourney, freshJourneyRun, loadJourney, checkpointJourney, finishJourney, chapterProjects, type Journey, type JourneyRun } from "./island-journey";
 import { IslandKeyboard } from "./IslandKeyboard";
 import { Icon } from "./IslandIcons";
+import { FIRST_ADVENTURE_KEY, emptyFirstAdventure, loadFirstAdventure, advanceAdventure, awardFirstAdventure, type AdventureAction, type FirstAdventureState } from "./first-adventure";
 const IslandScene = lazy(() => import("./IslandScene").then(m => ({ default: m.IslandScene })));
+const FirstAdventure = lazy(() => import("./FirstAdventure").then(m => ({ default: m.FirstAdventure })));
 type Page = "map" | "practice" | "garden" | "journal";
 type Phase = "home" | "intro" | "playing" | "paused" | "complete";
 type Settings = { sound: boolean; reducedMotion: boolean; keyboard: boolean };
@@ -47,6 +49,9 @@ export function IslandGame() {
   const [restSeconds, setRestSeconds] = useState(30);
   const [storageFailed, setStorageFailed] = useState(false);
   const [readyKeys, setReadyKeys] = useState<string[]>([]);
+  const [adventureOpen, setAdventureOpen] = useState(false);
+  const [firstStory, setFirstStory] = useState<FirstAdventureState>(emptyFirstAdventure);
+  const firstStoryRef = useRef(firstStory);
   const run = useRef<Run>(freshRun());
   const phaseRef = useRef<Phase>("home");
   const settingsRef = useRef(settings);
@@ -78,10 +83,15 @@ export function IslandGame() {
   useEffect(() => {
     try {
       // Local storage is an external store and is unavailable during server rendering.
+      const original = loadIslandProgress(localStorage.getItem(STORAGE_KEY));
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      const saved = loadIslandProgress(localStorage.getItem(STORAGE_KEY)); setProgress(saved); progressRef.current = saved;
-      const restored = loadJourney(localStorage.getItem(JOURNEY_KEY), saved); setJourney(restored); journeyRef.current = restored;
+      const story = loadFirstAdventure(localStorage.getItem(FIRST_ADVENTURE_KEY)); setFirstStory(story); firstStoryRef.current = story;
+      const saved = awardFirstAdventure(original, story); setProgress(saved); progressRef.current = saved;
+      const restored = loadJourney(localStorage.getItem(JOURNEY_KEY), saved);
+      if (story.phase === "complete") restored.projects[LESSONS[0].id] = Math.max(6, restored.projects[LESSONS[0].id] ?? 0);
+      setJourney(restored); journeyRef.current = restored;
       setSelected(restored.draft?.lesson ?? saved.unlocked); setChapter(Math.floor((restored.draft?.lesson ?? saved.unlocked) / 4));
+      if (!saved.history.length && !restored.draft && story.phase !== "complete") setAdventureOpen(true);
       const stored = JSON.parse(localStorage.getItem("anqi-island-settings-v1") ?? "null");
       setSettings({ sound: stored?.sound !== false, keyboard: stored?.keyboard !== false, reducedMotion: typeof stored?.reducedMotion === "boolean" ? stored.reducedMotion : matchMedia("(prefers-reduced-motion: reduce)").matches });
     } catch { setStorageFailed(true); }
@@ -108,6 +118,19 @@ export function IslandGame() {
     journeyRef.current = next; setJourney(next);
     try { localStorage.setItem(JOURNEY_KEY, JSON.stringify(next)); } catch { setStorageFailed(true); }
   }, []);
+  const updateFirstStory = useCallback((action: AdventureAction) => {
+    const next = advanceAdventure(firstStoryRef.current, action);
+    if (next === firstStoryRef.current) return next;
+    firstStoryRef.current = next; setFirstStory(next);
+    try { localStorage.setItem(FIRST_ADVENTURE_KEY, JSON.stringify(next)); } catch { setStorageFailed(true); }
+    if (next.phase === "complete") {
+      const awarded = awardFirstAdventure(progressRef.current, next);
+      progressRef.current = awarded; setProgress(awarded);
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(awarded)); } catch { setStorageFailed(true); }
+      storeJourney({ ...journeyRef.current, projects: { ...journeyRef.current.projects, [LESSONS[0].id]: 6 } });
+    }
+    return next;
+  }, [storeJourney]);
   const checkpoint = useCallback(() => {
     if (!run.current.started) return;
     storeJourney(checkpointJourney(journeyRef.current, { lesson: selected, review, prompts, run: run.current }));
@@ -174,6 +197,8 @@ export function IslandGame() {
   function selectChapter(index: number) { if (index * 4 > progress.unlocked) { setNotice(`完成${CHAPTERS[index - 1].name}的练习后，这座岛就会开放。`); return; } setChapter(index); setSelected(Math.min(progress.unlocked, index * 4)); }
   function showHelp() { pause(); setHelp(true); }
 
+  if (adventureOpen && hydrated) return <Suspense fallback={<div className="scene-loading"><Icon name="flower" size={32}/><p>正在打开棉棉的故事…</p></div>}><FirstAdventure state={firstStory} dispatch={updateFirstStory} sound={settings.sound} reducedMotion={settings.reducedMotion} storageFailed={storageFailed} onSound={chime} onToggleSound={() => setSettings(s => ({ ...s, sound: !s.sound }))} onExit={next => { setAdventureOpen(false); setPage("map"); setChapter(0); setSelected(Math.min(3, progressRef.current.unlocked)); setExploring(true); if (next !== undefined) openLesson(next); }}/></Suspense>;
+
   return <div ref={shell} className={`island-app desktop-game ${settings.reducedMotion ? "calm-mode" : ""} ${active ? "is-training" : ""} ${worldPage ? "is-world" : "is-library"} phase-${phase}`}>
     <header className="island-topbar">
       <button className="island-brand" onClick={() => { if (active) pause(); else switchPage("map"); }} aria-label="安琪打字机"><span className="brand-flower"><Icon name="flower" size={27}/></span><span><strong>安琪打字机</strong><small>和棉棉一起，让指尖的小岛生长</small></span></button>
@@ -183,13 +208,14 @@ export function IslandGame() {
     <main className="island-main">
       {worldPage && <section className={`world-stage biome-${chapter}`} aria-label={`${region.name}三维探索场景`}>
         {hydrated ? <Suspense fallback={<div className="scene-loading"><span className="loading-flower">✿</span><p>正在唤醒小岛…</p></div>}>
-          <IslandScene chapter={chapter} growth={progress.flowers} pulse={snapshot.line} celebrate={phase === "complete"} reducedMotion={settings.reducedMotion} paused={phase === "paused" || phase === "intro" || settingsOpen || help || rest || mapOpen} exploring={!active && exploring} training={active} focus={selected % 4} projects={built} available={Math.min(3, progress.unlocked - chapter * 4)} onQuest={station => { if (phaseRef.current === "home") openLesson(chapter * 4 + station); }}/>
+          <IslandScene chapter={chapter} growth={progress.flowers} pulse={snapshot.line} celebrate={phase === "complete"} reducedMotion={settings.reducedMotion} paused={phase === "paused" || phase === "intro" || settingsOpen || help || rest || mapOpen} exploring={!active && exploring} training={active} focus={selected % 4} projects={built} garden={chapter === 0 && firstStory.phase === "complete" ? { spot: firstStory.spot, color: firstStory.color } : undefined} available={Math.min(3, progress.unlocked - chapter * 4)} onQuest={station => { if (phaseRef.current === "home") openLesson(chapter * 4 + station); }}/>
         </Suspense> : <div className="scene-loading"><span className="loading-flower">✿</span><p>正在唤醒小岛…</p></div>}
         <div className="world-heading">
           <p className="world-eyebrow"><span/>CHAPTER 0{chapter + 1} · {active ? "指尖正在改变世界" : "一座由你亲手唤醒的小岛"}</p>
           <h1>{active ? review ? "和熟悉的按键，再见一面。" : chapter === 0 ? project.name : lesson.title : region.name}<span>{!active && ` / ${["溪边的好时光", "风吹过的秘密", "湖畔的星光", "写给远方的信"][chapter]}`}</span></h1>
           <p>{active ? review ? "慢慢找准手指，棉棉会陪着你。" : chapter === 0 ? project.action : lesson.story : "今天，让这里多一点你的痕迹。"}</p>
           {!active && <button className="world-map-button" onClick={() => setMapOpen(true)}><Icon name="map" size={18}/>岛屿与旅程<Icon name="chevron" size={16}/></button>}
+          {!active && <button className="world-map-button story-entry" disabled={!hydrated} onClick={() => setAdventureOpen(true)}><Icon name="paw" size={18}/>{firstStory.phase === "complete" ? "打开我们的小院纪念卡" : firstStory.phase === "meet" ? "新故事 · 帮棉棉找到新家" : "继续故事 · 棉棉的新家"}<Icon name="chevron" size={16}/></button>}
         </div>
         <div className="world-status"><Icon name={chapter === 2 ? "star" : "sun"} size={18}/><span>{chapter === 2 ? "星光微亮" : "晴 · 微风"}</span><i/><span>{active ? "Esc 暂停" : `今天练习 ${todayMinutes} 分钟`}</span></div>
         {!active && <aside className="mission-card">

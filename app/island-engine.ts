@@ -26,9 +26,9 @@ export const LESSONS: Lesson[] = [
 
 export type KeyRecord = { hits: number; misses: number };
 export type Session = { lesson: number; accuracy: number; wpm: number; seconds: number; hits: number; mistakes: number; date: string; review: boolean };
-export type IslandProgress = { version: 1; unlocked: number; best: Record<string, number>; flowers: number; keyStats: Record<string, KeyRecord>; history: Session[]; days: string[] };
+export type IslandProgress = { version: 1; unlocked: number; best: Record<string, number>; flowers: number; keyStats: Record<string, KeyRecord>; history: Session[]; days: string[]; firstAdventureClaimed: boolean };
 export const STORAGE_KEY = "anqi-island-learning-v1";
-export function emptyProgress(): IslandProgress { return { version: 1, unlocked: 0, best: {}, flowers: 0, keyStats: {}, history: [], days: [] }; }
+export function emptyProgress(): IslandProgress { return { version: 1, unlocked: 0, best: {}, flowers: 0, keyStats: {}, history: [], days: [], firstAdventureClaimed: false }; }
 export function localDay(date = new Date()) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`; }
 const finite = (v: unknown, max: number) => typeof v === "number" && Number.isFinite(v) ? Math.max(0, Math.min(max, v)) : 0;
 export function loadIslandProgress(raw: string | null): IslandProgress {
@@ -45,7 +45,7 @@ export function loadIslandProgress(raw: string | null): IslandProgress {
     // Unlock only a contiguous sequence of lessons completed accurately.
     let unlocked = 0;
     while (unlocked < LESSONS.length - 1 && (best[LESSONS[unlocked].id] ?? 0) >= 90) unlocked++;
-    return { ...fresh, unlocked, best, keyStats, flowers: Math.floor(finite(data.flowers, 1e7)), days: Array.isArray(data.days) ? data.days.filter((d: unknown) => typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d)).slice(-365) : [], history: Array.isArray(data.history) ? data.history.filter((s: Session) => s && Number.isInteger(s.lesson) && s.lesson >= 0 && s.lesson < LESSONS.length && Number.isFinite(s.accuracy) && Number.isFinite(s.seconds) && Number.isFinite(s.wpm) && typeof s.date === "string").slice(-60) : [] };
+    return { ...fresh, unlocked, best, keyStats, firstAdventureClaimed: data.firstAdventureClaimed === true, flowers: Math.floor(finite(data.flowers, 1e7)), days: Array.isArray(data.days) ? data.days.filter((d: unknown) => typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d)).slice(-365) : [], history: Array.isArray(data.history) ? data.history.filter((s: Session) => s && Number.isInteger(s.lesson) && s.lesson >= 0 && s.lesson < LESSONS.length && Number.isFinite(s.accuracy) && Number.isFinite(s.seconds) && Number.isFinite(s.wpm) && typeof s.date === "string").slice(-60) : [] };
   } catch { return fresh; }
 }
 export function scoreSession(lesson: number, hits: number, mistakes: number, seconds: number, review = false): Session {

@@ -6,12 +6,16 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { planIslandWalk } from "./island-engine";
 import { PROJECTS } from "./island-journey";
 import { createBichonCompanion } from "./BichonCompanion";
+import { GARDEN_SPOTS, GARDEN_COLORS, type AdventureSceneState, type AdventureSceneAction, type GardenSpot, type GardenColor } from "./first-adventure";
 
 type Props = {
   chapter: number; growth: number; pulse: number; celebrate: boolean;
   reducedMotion: boolean; paused: boolean; exploring: boolean;
   available: number; onQuest: (station: number) => void;
   training: boolean; focus: number; projects: number[];
+  adventure?: AdventureSceneState; onAdventureAction?: (action: AdventureSceneAction) => void;
+  garden?: { spot: GardenSpot | null; color: GardenColor };
+  onAvailabilityChange?: (available: boolean) => void;
 };
 
 const PALETTES = [
@@ -46,7 +50,7 @@ export function IslandScene(props: Props) {
     try { renderer = new T.WebGLRenderer({ alpha: true, antialias: true, powerPreference: "high-performance" }); }
     // This effect synchronizes React's loading state with the external WebGL renderer.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    catch { setStatus("error"); return; }
+    catch { setStatus("error"); live.current.onAvailabilityChange?.(false); return; }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.65));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = T.PCFShadowMap;
@@ -280,6 +284,60 @@ export function IslandScene(props: Props) {
     }
     const companion = createBichonCompanion();
     const dog = companion.root; island.add(dog); dog.position.set(.2, .18, 2.4); dog.scale.setScalar(.82);
+    const dogPick = new T.Mesh(new T.SphereGeometry(.6, 12, 8), new T.MeshBasicMaterial({ visible: false })); island.add(dogPick);
+    // Story props share the island and its navigation, so discoveries happen in the live world.
+    const seedPoint = new T.Vector3(-.95, .18, 3.05);
+    const seedBag = new T.Group(); seedBag.position.copy(seedPoint); island.add(seedBag);
+    ball(seedBag, 0xd6bc91, 0, .23, 0, .19, .23, .16);
+    mesh(seedBag, new T.CylinderGeometry(.095, .12, .1, 12), 0xe8d4af, 0, .42, 0);
+    mesh(seedBag, new T.TorusGeometry(.09, .015, 6, 20), 0x8c9b6e, 0, .4, 0).rotation.x = Math.PI / 2;
+    box(seedBag, 0xfff3d3, 0, .23, .152, .13, .16, .015);
+    ball(seedBag, 0x839a6d, 0, .24, .17, .027, .055, .012).rotation.z = -.4;
+    const seedGlow = new T.Mesh(new T.RingGeometry(.29, .34, 48), new T.MeshBasicMaterial({ color: 0xf9da89, side: T.DoubleSide, transparent: true, opacity: .8, depthWrite: false }));
+    seedGlow.rotation.x = -Math.PI / 2; seedGlow.position.y = -.015; seedBag.add(seedGlow);
+    const seedCanvas = document.createElement("canvas"); seedCanvas.width = 256; seedCanvas.height = 96;
+    const seedContext = seedCanvas.getContext("2d")!;
+    seedContext.fillStyle = "#fffbed"; seedContext.beginPath(); seedContext.roundRect(3, 3, 250, 84, 20); seedContext.fill();
+    seedContext.fillStyle = "#496a4e"; seedContext.font = "600 30px sans-serif"; seedContext.textAlign = "center"; seedContext.fillText("花种在这里", 128, 54);
+    const seedTexture = new T.CanvasTexture(seedCanvas); seedTexture.colorSpace = T.SRGBColorSpace;
+    const seedLabel = new T.Sprite(new T.SpriteMaterial({ map: seedTexture, depthTest: false })); seedLabel.position.y = .9; seedLabel.scale.set(1.15, .43, 1); seedBag.add(seedLabel);
+    const footprints = new T.Group(); island.add(footprints);
+    for (let i = 0; i < 7; i++) {
+      const f = new T.Group(); f.position.set(.2 - i * .16, .158, 2.45 + i * .085); f.rotation.y = -.9; footprints.add(f);
+      ball(f, 0xd6bf85, 0, 0, 0, .047, .009, .057);
+      for (let toe = 0; toe < 3; toe++) ball(f, 0xd6bf85, (toe - 1) * .035, 0, .066, .021, .008, .025);
+    }
+    const wateringCan = new T.Group(); wateringCan.position.set(-1.25, .32, 1.6); island.add(wateringCan);
+    ball(wateringCan, 0x8faea8, 0, .17, 0, .17, .2, .14);
+    const spout = mesh(wateringCan, new T.CylinderGeometry(.027, .04, .43, 10), 0x8faea8, -.23, .22, 0); spout.rotation.z = -.95;
+    const handle = mesh(wateringCan, new T.TorusGeometry(.135, .023, 7, 20), 0x708e87, .15, .2, 0); handle.scale.x = .65;
+    const waterDrops = new T.Points(new T.BufferGeometry(), new T.PointsMaterial({ color: 0xb4e5ed, size: .055, transparent: true, opacity: .9, depthWrite: false }));
+    const waterPositions = new Float32Array(18 * 3); waterDrops.geometry.setAttribute("position", new T.BufferAttribute(waterPositions, 3)); island.add(waterDrops);
+    const plotMarkers: T.Mesh[] = [], plotLabels: T.Sprite[] = [];
+    for (const spot of GARDEN_SPOTS) {
+      const marker = new T.Mesh(new T.RingGeometry(.28, .34, 40), new T.MeshBasicMaterial({ color: 0xffe4a3, side: T.DoubleSide, transparent: true, opacity: .9 }));
+      marker.position.set(spot.position[0], .165, spot.position[1]); marker.rotation.x = -Math.PI / 2; marker.userData.spot = spot.id; island.add(marker); plotMarkers.push(marker);
+      const canvas = document.createElement("canvas"); canvas.width = 224; canvas.height = 88;
+      const context = canvas.getContext("2d")!;
+      context.fillStyle = "#fff7dc"; context.beginPath(); context.roundRect(4, 4, 216, 72, 18); context.fill();
+      context.strokeStyle = "#b0a273"; context.lineWidth = 3; context.stroke();
+      context.fillStyle = "#536941"; context.font = "600 29px sans-serif"; context.textAlign = "center"; context.fillText(spot.label, 112, 51);
+      const texture = new T.CanvasTexture(canvas); texture.colorSpace = T.SRGBColorSpace;
+      const label = new T.Sprite(new T.SpriteMaterial({ map: texture, depthTest: false, depthWrite: false }));
+      label.position.set(spot.position[0], .95, spot.position[1]); label.scale.set(1.25, .49, 1); label.userData.spot = spot.id; island.add(label); plotLabels.push(label);
+    }
+    const personalGarden = new T.Group(); island.add(personalGarden);
+    mesh(personalGarden, new T.CylinderGeometry(.27, .2, .24, 24), 0xbb9379, 0, .13, 0);
+    mesh(personalGarden, new T.CylinderGeometry(.25, .25, .025, 24), 0x806d58, 0, .255, 0);
+    const personalPetals: T.Mesh[] = [];
+    for (let i = 0; i < 5; i++) {
+      const a = i * 2.399, x = Math.cos(a) * .14, z = Math.sin(a) * .14, h = .48 + i % 2 * .12;
+      pole(personalGarden, 0x698d62, x, h / 2 + .15, z, .012, h - .15);
+      for (let k = 0; k < 5; k++) { const angle = k / 5 * Math.PI * 2; personalPetals.push(ball(personalGarden, 0xe6b1a6, x + Math.cos(angle) * .063, h, z + Math.sin(angle) * .063, .052, .025, .055)); }
+      ball(personalGarden, 0xe1b86a, x, h + .013, z, .03, .02, .03);
+    }
+    // A dedicated material prevents recolouring other flowers that share pooled materials.
+    const personalMaterial = new T.MeshStandardMaterial({ color: 0xe6b1a6, roughness: .9 }); personalPetals.forEach(p => { p.material = personalMaterial; });
     // The same live model can be inspected without scenery covering its face or paws.
     const portraitScene = new T.Scene(); portraitScene.background = new T.Color(0xe9e8e0);
     portraitScene.fog = new T.Fog(0xe9e8e0, 8, 30);
@@ -328,15 +386,22 @@ export function IslandScene(props: Props) {
     const target = new T.Vector3(.2, .18, 2.4);
     let questTarget: number | null = null, lastAuto = 0, dragging = false, downX = 0, downY = 0;
     let walkRoute: T.Vector3[] = [], wasExploring = live.current.exploring;
+    let pendingStoryAction: AdventureSceneAction | null = null, lastStoryPhase = "", lastStoryCommand = -1;
+    let lastStoryHits = live.current.adventure?.hits ?? 0, lastWaterAt = -100, storyCelebrationAt = -100;
     let wasTraining = false, lastFocus = -1, wasCompanionView = false, lastCompanionAngle = "";
     const companionOverviewPosition = camera.position.clone(), companionOverviewTarget = controls.target.clone();
     const overviewPosition = camera.position.clone(), overviewTarget = controls.target.clone();
     const focusTarget = new T.Vector3(), focusCamera = new T.Vector3(), fittedCamera = new T.Vector3();
     function walkTo(x: number, z: number, station: number | null) {
       const path = planIslandWalk(dog.position, { x, z }, live.current.projects[1] >= 6);
-      if (!path.length) return;
+      if (!path.length) return false;
       walkRoute = path.map(p => new T.Vector3(p.x, .18, p.z));
       target.copy(walkRoute.shift()!); questTarget = station;
+      return true;
+    }
+    function findSeeds() {
+      if (live.current.adventure?.phase !== "trail") return;
+      if (walkTo(seedPoint.x + .32, seedPoint.z, null)) pendingStoryAction = "seeds";
     }
     const raycaster = new T.Raycaster(); const pointer = new T.Vector2();
     const down = (e: PointerEvent) => { downX = e.clientX; downY = e.clientY; dragging = false; };
@@ -344,6 +409,18 @@ export function IslandScene(props: Props) {
     const up = (e: PointerEvent) => {
       if (dragging || live.current.paused || live.current.training || companionViewRef.current) return;
       const rect = renderer.domElement.getBoundingClientRect(); pointer.set((e.clientX - rect.left) / rect.width * 2 - 1, -(e.clientY - rect.top) / rect.height * 2 + 1); raycaster.setFromCamera(pointer, camera);
+      const story = live.current.adventure;
+      if (story) {
+        if (story.phase === "meet" && raycaster.intersectObject(dogPick).length) { live.current.onAdventureAction?.("greet"); return; }
+        if (story.phase === "trail" && raycaster.intersectObject(seedBag, true).length) { findSeeds(); return; }
+        if (story.phase === "decorate") {
+          const pickedSpot = raycaster.intersectObjects([...plotMarkers, ...plotLabels])[0];
+          if (pickedSpot) { live.current.onAdventureAction?.(pickedSpot.object.userData.spot); return; }
+        }
+        const hit = raycaster.intersectObject(ground)[0];
+        if (hit && live.current.exploring) { pendingStoryAction = null; walkTo(hit.point.x, hit.point.z, null); }
+        return;
+      }
       const picked = raycaster.intersectObjects(pickables).find(hit => Number(hit.object.userData.station) <= live.current.available);
       if (picked && !live.current.celebrate) {
         const i = Number(picked.object.userData.station);
@@ -356,7 +433,7 @@ export function IslandScene(props: Props) {
     renderer.domElement.addEventListener("pointerdown", down);
     renderer.domElement.addEventListener("pointermove", move);
     renderer.domElement.addEventListener("pointerup", up);
-    const lost = (e: Event) => { e.preventDefault(); setStatus("error"); };
+    const lost = (e: Event) => { e.preventDefault(); setStatus("error"); live.current.onAvailabilityChange?.(false); };
     renderer.domElement.addEventListener("webglcontextlost", lost);
     const resize = () => {
       const w = mount.clientWidth, h = mount.clientHeight;
@@ -396,6 +473,18 @@ export function IslandScene(props: Props) {
         lastCompanionAngle = angle;
       }
       if (wasExploring !== state.exploring) { walkRoute = []; questTarget = null; target.copy(dog.position); wasExploring = state.exploring; }
+      const story = state.adventure;
+      if (story && story.phase !== lastStoryPhase) {
+        pendingStoryAction = null;
+        if (story.phase === "trail") walkTo(-.35, 2.85, null);
+        if (story.phase === "sprouts" || story.phase === "decorate") walkTo(-1.2, 2.05, null);
+        if (story.phase === "complete" && story.spot) {
+          storyCelebrationAt = time;
+          const spot = GARDEN_SPOTS.find(p => p.id === story.spot)!; walkTo(spot.position[0] + .4, spot.position[1], null);
+        }
+        lastStoryPhase = story.phase;
+      }
+      if (story && story.command !== lastStoryCommand) { if (story.command > 0) findSeeds(); lastStoryCommand = story.command; }
       if (state.training && (!wasTraining || lastFocus !== state.focus)) {
         if (!wasTraining) { overviewPosition.copy(camera.position); overviewTarget.copy(controls.target); }
         const [x, z] = PROJECTS[state.focus].position;
@@ -426,15 +515,40 @@ export function IslandScene(props: Props) {
         butterflies.forEach((b, i) => { b.position.set(Math.sin(time * .32 + i * 1.4) * 2.8, .7 + Math.sin(time * .8 + i) * .17, Math.cos(time * .22 + i * 1.4) * 2.4); b.rotation.y = -time * .25; b.children.forEach((wing, j) => { wing.rotation.z = Math.sin(time * 9 + i) * .75 * (j ? 1 : -1); }); });
       }
       ripples.forEach((r, i) => { const a = (time * .22 + i / 3) % 1; r.scale.setScalar(.5 + a * 4); (r.material as T.MeshBasicMaterial).opacity = (1 - a) * .3; });
-      stations.forEach((s, i) => { s.visible = !state.training; s.children[1].position.y = .85 + (movingWorld ? Math.sin(time * 1.4 + i) * .045 : 0); (s.children[1] as T.Sprite).material.opacity = i <= state.available ? 1 : .42; });
+      stations.forEach((s, i) => { s.visible = !state.training && !story; s.children[1].position.y = .85 + (movingWorld ? Math.sin(time * 1.4 + i) * .045 : 0); (s.children[1] as T.Sprite).material.opacity = i <= state.available ? 1 : .42; });
+      seedBag.visible = story?.phase === "trail"; footprints.visible = story?.phase === "trail";
+      seedGlow.scale.setScalar(movingWorld ? 1 + Math.sin(time * 2) * .09 : 1);
+      dogPick.position.copy(dog.position); dogPick.position.y += .55;
+      wateringCan.visible = !!story && ["prepare", "plant", "sprouts", "bloom"].includes(story.phase);
+      if (story && story.hits !== lastStoryHits) { if (story.hits > lastStoryHits) lastWaterAt = time; lastStoryHits = story.hits; }
+      const waterAge = time - lastWaterAt;
+      waterDrops.visible = !!story && waterAge < .6 && !state.reducedMotion;
+      wateringCan.rotation.z = waterDrops.visible ? .2 : 0;
+      if (waterDrops.visible) {
+        for (let i = 0; i < 18; i++) { const p = (waterAge * 1.6 + i / 18) % 1; waterPositions[i * 3] = -1.55 - p * .65; waterPositions[i * 3 + 1] = .68 - p * p * .42; waterPositions[i * 3 + 2] = 1.6 + Math.sin(i) * .07; }
+        waterDrops.geometry.attributes.position.needsUpdate = true;
+      }
+      const decoration = story ?? state.garden;
+      plotMarkers.forEach((marker, i) => { marker.visible = story?.phase === "decorate"; plotLabels[i].visible = marker.visible; marker.scale.setScalar(story?.spot === GARDEN_SPOTS[i].id ? 1.18 : 1); });
+      personalGarden.visible = !!decoration?.spot;
+      if (decoration?.spot) {
+        const spot = GARDEN_SPOTS.find(p => p.id === decoration.spot)!; personalGarden.position.set(spot.position[0], .14, spot.position[1]);
+        personalMaterial.color.setHex(GARDEN_COLORS.find(c => c.id === decoration.color)!.value);
+      }
       const constructionDelta = state.paused ? 0 : delta;
       bridgePlanks.forEach((plank, i) => { const built = i < state.projects[1]; plank.visible = built; if (built) plank.position.y = T.MathUtils.damp(plank.position.y, plank.userData.baseY, 5, constructionDelta); else plank.position.y = plank.userData.baseY + .65; });
       bridgeRails.forEach(rail => { rail.visible = state.projects[1] === 6; });
       chimePipes.forEach((bell, i) => { bell.visible = i < state.projects[2]; if (movingWorld) bell.rotation.x = Math.sin(time * 2.5 + i) * .13; });
       gardenLamps.forEach((m, i) => { m.emissiveIntensity = i < state.projects[3] ? 2 : 0; m.color.setHex(i < state.projects[3] ? 0xffd890 : 0x98a99a); });
       glass.emissiveIntensity = state.projects[3] / 6 * 1.4; glass.color.setHex(state.projects[3] ? 0xffdfa1 : 0x839d98); cottageLight.intensity = state.projects[3] / 6 * 3;
-      flowerGroups.forEach((f, i) => { const unlocked = i < 55 || i - 55 < state.projects[0] * 4; const scale = unlocked ? 1 : .001; const next = state.reducedMotion ? scale : T.MathUtils.damp(f.scale.x, scale, 5, constructionDelta); f.scale.setScalar(next); f.visible = unlocked; if (movingWorld) f.rotation.z = Math.sin(time * 1.1 + i) * .04; });
-      if (movingWorld && !closeCompanion && !state.training && !walkRoute.length && questTarget === null && time - lastAuto > 10) { lastAuto = time; walkTo(.2 + Math.sin(time * .2) * .9, 2.65 + Math.cos(time * .3) * .25, null); }
+      flowerGroups.forEach((f, i) => {
+        const unlocked = i < 55 || i - 55 < state.projects[0] * 4;
+        const blooming = !story || i < 55 || Math.floor((i - 55) / 4) < story.line - 6;
+        if (i >= 55) f.children.slice(2).forEach(petal => { petal.visible = blooming; });
+        const scale = unlocked ? blooming ? 1 : .65 : .001; const next = state.reducedMotion ? scale : T.MathUtils.damp(f.scale.x, scale, 5, constructionDelta);
+        f.scale.setScalar(next); f.visible = unlocked; if (movingWorld) f.rotation.z = Math.sin(time * 1.1 + i) * .04;
+      });
+      if (movingWorld && !story && !closeCompanion && !state.training && !walkRoute.length && questTarget === null && time - lastAuto > 10) { lastAuto = time; walkTo(.2 + Math.sin(time * .2) * .9, 2.65 + Math.cos(time * .3) * .25, null); }
       direction.subVectors(target, dog.position); direction.y = 0;
       const distance = direction.length(); const walking = distance > .09 && !state.paused && (!state.reducedMotion || state.exploring);
       if (walking) {
@@ -442,7 +556,8 @@ export function IslandScene(props: Props) {
         const desired = Math.atan2(direction.x, direction.z); dog.rotation.y += Math.atan2(Math.sin(desired - dog.rotation.y), Math.cos(desired - dog.rotation.y)) * Math.min(1, delta * 8);
       } else if (walkRoute.length && !state.paused) target.copy(walkRoute.shift()!);
       else if (questTarget !== null && !state.paused) { const i = questTarget; questTarget = null; state.onQuest(i); }
-      companion.update({ time, delta, walking, paused: state.paused, reducedMotion: state.reducedMotion, celebrate: state.celebrate, cameraDistance: camera.position.distanceTo(dog.position) });
+      else if (pendingStoryAction && !state.paused) { const action = pendingStoryAction; pendingStoryAction = null; state.onAdventureAction?.(action); }
+      companion.update({ time, delta, walking, paused: state.paused, reducedMotion: state.reducedMotion, celebrate: state.celebrate && (!story || time - storyCelebrationAt < 3), cameraDistance: camera.position.distanceTo(dog.position) });
       if (state.pulse !== lastPulse || (state.celebrate && !lastCelebrate)) { burstAt = state.pulse > lastPulse || state.celebrate ? time : -100; lastPulse = state.pulse; }
       lastCelebrate = state.celebrate;
       const age = time - burstAt;
@@ -454,7 +569,7 @@ export function IslandScene(props: Props) {
       }
       renderer.render(closeCompanion ? portraitScene : scene, camera);
     }
-    frame = requestAnimationFrame(animate); setStatus("ready");
+    frame = requestAnimationFrame(animate); setStatus("ready"); live.current.onAvailabilityChange?.(true);
     return () => {
       cancelAnimationFrame(frame); observer.disconnect(); controls.dispose();
       renderer.domElement.removeEventListener("pointerdown", down); renderer.domElement.removeEventListener("pointermove", move); renderer.domElement.removeEventListener("pointerup", up); renderer.domElement.removeEventListener("webglcontextlost", lost);
@@ -468,7 +583,7 @@ export function IslandScene(props: Props) {
 
   return <div className="island-render" data-render-status={status} data-projects={props.projects.join(",")}>
     <div ref={mountRef} className="island-canvas-mount" />
-    {status === "ready" && !props.training && !props.celebrate && <div className="companion-view-tools">
+    {status === "ready" && !props.training && !props.celebrate && !props.adventure && <div className="companion-view-tools">
       <button className="world-map-button" aria-pressed={companionView} disabled={props.paused} onClick={() => { companionViewRef.current = !companionView; setCompanionView(!companionView); }}>{companionView ? "返回小岛" : "近看棉棉"}</button>
       {companionView && <><span>拖动看看它 · 滚轮拉近</span><div className="companion-angle-buttons"><button disabled={props.paused} onClick={() => { companionAngleRef.current = "front"; }}>正面</button><button disabled={props.paused} onClick={() => { companionAngleRef.current = "side"; }}>侧面</button><button disabled={props.paused} onClick={() => { companionAngleRef.current = "portrait"; }}>斜侧面</button></div></>}
     </div>}

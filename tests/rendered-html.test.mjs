@@ -21,6 +21,7 @@ test("island entry renders a usable curriculum and adventure action before WebGL
   for (const label of ["今天，让这里多一点你的痕迹。", "开始小冒险", "练习小屋", "成长手账", "第一颗花种", "找到 F 和 J", "岛屿与旅程", "棉棉的溪边花园", "点击草地"]) assert.ok(html.includes(label), label);
   assert.match(html, /class="world-stage/);
   assert.match(html, /aria-label="小岛建设进度"/);
+  assert.ok(html.includes("新故事 · 帮棉棉找到新家"));
   assert.match(html, /aria-disabled="true"/);
   assert.doesNotMatch(html, /Internal Server Error|Your site is taking shape/);
 });
