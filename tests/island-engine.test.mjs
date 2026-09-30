@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { LESSONS, emptyProgress, loadIslandProgress, scoreSession, saveSession, weakKeys, reviewPrompts, fingerFor, localDay, planIslandWalk, isIslandWalkable } from "../app/island-engine.ts";
+import { CHAPTERS, LESSONS, chapterStart, chapterForLesson, chapterLocalIndex, chapterLessons, emptyProgress, loadIslandProgress, scoreSession, saveSession, weakKeys, reviewPrompts, fingerFor, localDay, planIslandWalk, isIslandWalkable } from "../app/island-engine.ts";
 
 test("each lesson only uses keys that have been introduced, including spaces and punctuation", () => {
   const known = new Set();
@@ -8,6 +8,7 @@ test("each lesson only uses keys that have been introduced, including spaces and
     for (const key of lesson.keys) known.add(key);
     assert.equal(lesson.prompts.length, 6);
     for (const prompt of lesson.prompts) {
+      if (lesson.mode === "pinyin") { assert.match(prompt, /^[\u3400-\u9fff，。！？：；、\s]+$/); continue; }
       for (const key of prompt) assert.ok(known.has(key.toLowerCase()), `Lesson ${index + 1} uses untaught ${JSON.stringify(key)}`);
     }
   }
@@ -22,10 +23,57 @@ test("accurate completed lessons unlock the next stage and persist across reload
     progress = loadIslandProgress(JSON.stringify(progress));
     assert.equal(progress.unlocked, Math.min(index + 1, LESSONS.length - 1));
   }
-  assert.equal(Object.keys(progress.best).length, 16);
-  assert.equal(progress.flowers, 96);
-  assert.equal(progress.keyStats.f.hits, 1440);
-  assert.equal(progress.history.length, 16);
+  assert.equal(Object.keys(progress.best).length, LESSONS.length);
+  assert.equal(progress.flowers, LESSONS.length * 6);
+  assert.equal(progress.keyStats.f.hits, LESSONS.length * 90);
+  assert.equal(progress.history.length, LESSONS.length);
+});
+
+test("six regions contain 32 stable lessons and old 16-lesson saves continue at the new region", () => {
+  assert.deepEqual(CHAPTERS.map(chapter => chapter.count), [4, 4, 4, 4, 8, 8]);
+  assert.equal(LESSONS.length, 32);
+  for (let chapter = 0; chapter < CHAPTERS.length; chapter++) {
+    assert.equal(chapterLessons(chapter).length, CHAPTERS[chapter].count);
+    for (const index of Array.from({ length: CHAPTERS[chapter].count }, (_, offset) => chapterStart(chapter) + offset)) {
+      assert.equal(chapterForLesson(index), chapter);
+      assert.equal(chapterLocalIndex(index), index - chapterStart(chapter));
+    }
+  }
+  const oldBest = Object.fromEntries(LESSONS.slice(0, 16).map(lesson => [lesson.id, 93]));
+  const saved = loadIslandProgress(JSON.stringify({ version: 1, best: oldBest, flowers: 40 }));
+  assert.equal(saved.unlocked, 16);
+  assert.equal(saved.flowers, 40);
+  assert.equal(chapterForLesson(saved.unlocked), 4);
+});
+
+test("Chinese IME lessons measure committed characters, without adding Chinese characters to finger review", () => {
+  assert.equal(scoreSession(24, 30, 0, 60).wpm, 30);
+  assert.equal(scoreSession(0, 30, 0, 60).wpm, 6);
+  assert.deepEqual(reviewPrompts({ f: { hits: 2, misses: 3 } }, 24), LESSONS[24].prompts);
+  assert.deepEqual(weakKeys({ 你: { hits: 1, misses: 4 }, f: { hits: 1, misses: 2 } }), ["f"]);
+});
+
+test("finger mastery distinguishes aided completion, independent recall, and a later-day retest", () => {
+  const assisted = saveSession(emptyProgress(), scoreSession(0, 30, 0, 60), {});
+  assert.equal(assisted.unlocked, 1);
+  assert.equal(assisted.mastery[LESSONS[0].id], undefined);
+  const independent = saveSession(assisted, scoreSession(0, 30, 0, 60, true, true), {});
+  assert.equal(independent.mastery[LESSONS[0].id].independentBest, 100);
+  assert.equal(independent.mastery[LESSONS[0].id].delayedBest, 0);
+  assert.equal(independent.unlocked, 1, "review must not unlock a lesson");
+  const againToday = saveSession(independent, scoreSession(0, 30, 0, 60, true, true), {});
+  assert.equal(againToday.mastery[LESSONS[0].id].delayedBest, 0);
+  const older = { ...againToday, mastery: { ...againToday.mastery, [LESSONS[0].id]: { ...againToday.mastery[LESSONS[0].id], independentDate: "2020-01-01" } } };
+  const delayed = loadIslandProgress(JSON.stringify(saveSession(older, scoreSession(0, 30, 0, 60, true, true), {})));
+  assert.equal(delayed.mastery[LESSONS[0].id].delayedBest, 100);
+  assert.equal(delayed.mastery[LESSONS[0].id].delayedDate, localDay());
+});
+
+test("slow keys join personalized finger practice only after enough timing evidence", () => {
+  const stats = { f: { hits: 12, misses: 0 }, j: { hits: 12, misses: 0 } };
+  assert.deepEqual(weakKeys(stats, { j: { samples: 2, totalMs: 10000, hesitations: 2 } }), []);
+  assert.deepEqual(weakKeys(stats, { j: { samples: 5, totalMs: 11000, hesitations: 3 } }), ["j"]);
+  assert.ok(reviewPrompts(stats, 0, { j: { samples: 5, totalMs: 11000, hesitations: 3 } })[0].includes("j"));
 });
 
 test("accuracy rather than speed gates progress; review cannot bypass the course", () => {
@@ -81,7 +129,7 @@ test("session speed uses five-character words and bounded recent history", () =>
 
 test("click-to-walk reaches every station without crossing the cottage, pond or island edge", () => {
   const start = { x: .2, z: 2.4 };
-  for (const end of [{ x: -.55, z: 2.55 }, { x: 2.65, z: .12 }, { x: -2.2, z: -.2 }, { x: .3, z: -2.7 }]) {
+  for (const end of [{ x: -.55, z: 2.55 }, { x: 2.65, z: .12 }, { x: -2.2, z: -.2 }, { x: .3, z: -2.7 }, { x: -3.15, z: 1.3 }, { x: 3.2, z: -1.5 }, { x: 1.1, z: -2.7 }, { x: .3, z: 3.45 }]) {
     const path = planIslandWalk(start, end);
     assert.ok(path.length > 0);
     assert.deepEqual(path.at(-1), end);
@@ -92,4 +140,20 @@ test("click-to-walk reaches every station without crossing the cottage, pond or 
     }
   }
   for (const point of [{ x: -.9, z: -1.45 }, { x: 2.2, z: 1.6 }, { x: 8, z: 8 }]) assert.deepEqual(planIslandWalk(start, point), []);
+});
+
+test("larger town and harbor terrain keeps all eight task landmarks reachable", () => {
+  const start = { x: .2, z: 2.4 };
+  const outer = [{ x: -4.8, z: 1.6 }, { x: 4.7, z: -2 }, { x: 1.3, z: -3.9 }, { x: .3, z: 4.45 }];
+  for (const chapter of [4, 5]) for (const end of outer) {
+    const path = planIslandWalk(start, end, true, chapter);
+    assert.ok(path.length, `${CHAPTERS[chapter].name} cannot reach ${JSON.stringify(end)}`);
+    assert.deepEqual(path.at(-1), end);
+    let before = start;
+    for (const point of path) {
+      for (let t = 0; t <= 1; t += .02) assert.ok(isIslandWalkable({ x: before.x + (point.x - before.x) * t, z: before.z + (point.z - before.z) * t }, true, chapter));
+      before = point;
+    }
+  }
+  assert.equal(isIslandWalkable({ x: -4.8, z: 1.6 }, true), false, "old islands stay smaller");
 });

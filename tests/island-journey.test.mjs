@@ -70,3 +70,18 @@ test("a bridge under construction is not walkable; complete bridge unlocks passa
   assert.deepEqual(planIslandWalk({ x: .98, z: 2.5 }, middle, false), []);
   assert.ok(planIslandWalk({ x: .98, z: 2.5 }, middle, true).length > 0);
 });
+
+test("old D/K drafts survive the improved bridge lesson and no-hint retests resume", () => {
+  const old = draft(1, 2, 1);
+  old.prompts = ["dd", "kk", "dk", "kd", "fdkj", "dkdk"];
+  old.run.hits = 5;
+  old.run.combo = 5;
+  old.run.stats = { d: { hits: 3, misses: 0 }, k: { hits: 2, misses: 0 } };
+  const progress = saveSession(emptyProgress(), scoreSession(0, 20, 0, 30), {});
+  const restored = loadJourney(JSON.stringify(checkpointJourney(emptyJourney(), old)), progress);
+  assert.deepEqual(restored.draft.prompts, old.prompts);
+  assert.equal(restored.draft.run.position, 1);
+  const retest = { ...draft(0, 1, 1, true), retest: true };
+  const reviewSaved = loadJourney(JSON.stringify(checkpointJourney(emptyJourney(), retest)), progress);
+  assert.equal(reviewSaved.draft.retest, true);
+});

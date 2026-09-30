@@ -119,7 +119,7 @@ export function FirstAdventure({ state, dispatch, sound, reducedMotion, storageF
     <main className={`adventure-main ${coach ? "has-coach" : ""}`}>
       <section className={`world-stage biome-0 adventure-world ${coach ? "focused-world" : ""}`} aria-label="棉棉新家的三维故事场景">
         <Suspense fallback={<div className="scene-loading"><Icon name="flower" size={32}/><p>棉棉在准备小院…</p></div>}>
-          <IslandScene chapter={0} growth={0} pulse={state.line} celebrate={state.phase === "complete"} reducedMotion={reducedMotion} paused={paused} exploring={!coach} available={0} onQuest={() => {}} training={coach} focus={0} projects={[Math.min(6, state.line), 0, 0, 0]} adventure={{ phase: state.phase, line: state.line, hits: state.hits, color: state.color, spot: state.spot, command }} onAdventureAction={storyAction} onAvailabilityChange={available => setSceneUnavailable(!available)}/>
+          <IslandScene chapter={0} growth={0} pulse={state.line} keyHits={state.hits} celebrate={state.phase === "complete"} reducedMotion={reducedMotion} paused={paused} exploring={!coach} available={0} onQuest={() => {}} training={coach} focus={0} projects={[Math.min(6, state.line), 0, 0, 0]} adventure={{ phase: state.phase, line: state.line, hits: state.hits, color: state.color, spot: state.spot, command }} onAdventureAction={storyAction} onAvailabilityChange={available => setSceneUnavailable(!available)}/>
         </Suspense>
         <div className="story-world-heading"><p><span/>我们的第一段冒险 · {step + 1} / 6</p><h1>{copy.title}</h1>{coach && <span>{copy.description}</span>}</div>
         <div className="story-save-status"><Icon name={storageFailed ? "book" : "check"} size={16}/>{storageFailed ? "暂时无法保存" : "进度自动保存"}</div>

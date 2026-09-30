@@ -3,13 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import * as T from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { planIslandWalk } from "./island-engine";
-import { PROJECTS } from "./island-journey";
+import { CHAPTERS, chapterLessons, planIslandWalk } from "./island-engine";
 import { createBichonCompanion } from "./BichonCompanion";
 import { GARDEN_SPOTS, GARDEN_COLORS, type AdventureSceneState, type AdventureSceneAction, type GardenSpot, type GardenColor } from "./first-adventure";
 
 type Props = {
-  chapter: number; growth: number; pulse: number; celebrate: boolean;
+  chapter: number; growth: number; pulse: number; keyHits: number; celebrate: boolean;
   reducedMotion: boolean; paused: boolean; exploring: boolean;
   available: number; onQuest: (station: number) => void;
   training: boolean; focus: number; projects: number[];
@@ -23,6 +22,8 @@ const PALETTES = [
   { grass: 0x91b09a, foliage: 0x92b89d, roof: 0x849c85, water: 0x7db6b1, flowers: [0xffe3a9, 0xd8cde4, 0xf3b7a6] },
   { grass: 0x9fadc4, foliage: 0xbab7d8, roof: 0x8c8caa, water: 0x83abc9, flowers: [0xe5d8f2, 0xf9e1ba, 0xe2c8db] },
   { grass: 0xb9bc96, foliage: 0xe4c49b, roof: 0xb68d76, water: 0x98c7c7, flowers: [0xffd2b0, 0xe3d2e9, 0xfff0dc] },
+  { grass: 0x9cae83, foliage: 0xd9a882, roof: 0x9e6f5f, water: 0x78a8a4, flowers: [0xf6c79c, 0xf2e4b6, 0xdcaeb7] },
+  { grass: 0x8ea99f, foliage: 0xa8c5bc, roof: 0x577c85, water: 0x559cad, flowers: [0xf9e1af, 0xd7e8e6, 0xf4c7af] },
 ];
 
 export function IslandScene(props: Props) {
@@ -51,26 +52,28 @@ export function IslandScene(props: Props) {
     // This effect synchronizes React's loading state with the external WebGL renderer.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     catch { setStatus("error"); live.current.onAvailabilityChange?.(false); return; }
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.65));
+    const nativePixelRatio = Math.min(window.devicePixelRatio, 1.65);
+    renderer.setPixelRatio(nativePixelRatio);
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = T.PCFShadowMap;
     renderer.outputColorSpace = T.SRGBColorSpace;
     renderer.toneMapping = T.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.08;
-    renderer.domElement.setAttribute("aria-label", "实时三维花语岛，拖动旋转视角，探索时点击地面移动棉棉");
+    renderer.domElement.setAttribute("aria-label", `实时三维${CHAPTERS[props.chapter].name}，拖动旋转视角，探索时点击地面移动棉棉`);
     renderer.domElement.setAttribute("role", "img");
     mount.appendChild(renderer.domElement);
 
     const scene = new T.Scene();
     const camera = new T.PerspectiveCamera(34, 1, .1, 150);
-    camera.position.set(8.5, 7, 10.5);
+    if (props.chapter >= 4) camera.position.set(11, 8.6, 13.4);
+    else camera.position.set(8.5, 7, 10.5);
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.target.set(0, .2, 0);
     controls.enablePan = false;
     controls.enableDamping = true;
     controls.dampingFactor = .065;
     controls.minDistance = 11;
-    controls.maxDistance = 24;
+    controls.maxDistance = props.chapter >= 4 ? 29 : 24;
     controls.minPolarAngle = .48;
     controls.maxPolarAngle = 1.18;
     controls.enableZoom = true;
@@ -90,7 +93,7 @@ export function IslandScene(props: Props) {
     fill.position.set(6, 6, -7);
     scene.add(fill);
 
-    const palette = PALETTES[props.chapter];
+    const palette = PALETTES[props.chapter] ?? PALETTES[0];
     let seed = 1837;
     const random = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
     const materials = new Map<string, T.MeshStandardMaterial>();
@@ -110,16 +113,33 @@ export function IslandScene(props: Props) {
     const box = (p: T.Object3D, c: number, x: number, y: number, z: number, sx: number, sy: number, sz: number) => mesh(p, cube, c, x, y, z, sx, sy, sz);
     function pole(p: T.Object3D, c: number, x: number, y: number, z: number, r: number, height: number) { return mesh(p, new T.CylinderGeometry(r * .8, r, height, 10), c, x, y, z); }
     const island = new T.Group(); scene.add(island);
-    mesh(island, new T.CylinderGeometry(5.2, 4.65, .7, 80), 0xb5a792, 0, -.4, 0, 1, 1, .83);
-    mesh(island, new T.CylinderGeometry(4.65, 3.1, .95, 72), 0x9d948b, 0, -1.15, 0, 1, 1, .83);
-    mesh(island, new T.CylinderGeometry(5.24, 5.18, .2, 80), palette.grass, 0, .015, 0, 1, 1, .83);
+    const terrainScale = props.chapter >= 4 ? 1.27 : 1;
+    mesh(island, new T.CylinderGeometry(5.2, 4.65, .7, 80), 0xb5a792, 0, -.4, 0, terrainScale, 1, .83 * terrainScale);
+    mesh(island, new T.CylinderGeometry(4.65, 3.1, .95, 72), 0x9d948b, 0, -1.15, 0, terrainScale, 1, .83 * terrainScale);
+    mesh(island, new T.CylinderGeometry(5.24, 5.18, .2, 80), palette.grass, 0, .015, 0, terrainScale, 1, .83 * terrainScale);
     const ground = new T.Mesh(new T.CircleGeometry(5.1, 80), new T.MeshBasicMaterial({ visible: false, side: T.DoubleSide }));
-    ground.rotation.x = -Math.PI / 2; ground.scale.y = .81; ground.position.y = .14; island.add(ground);
+    ground.rotation.x = -Math.PI / 2; ground.scale.set(terrainScale, .81 * terrainScale, 1); ground.position.y = .14; island.add(ground);
     // Rounded stones break the silhouette of the floating island.
     for (let i = 0; i < 35; i++) {
       const a = i / 35 * Math.PI * 2;
-      const r = 4.9 + random() * .22;
+      const r = (4.9 + random() * .22) * terrainScale;
       ball(island, [0xa99f93, 0xc3b9a9, 0xb7ae9e][i % 3], Math.cos(a) * r, -.23 - random() * .24, Math.sin(a) * r * .83, .23 + random() * .24, .25, .2);
+    }
+    if (props.chapter >= 4) {
+      // Peripheral paths and a visible archipelago give the later regions more room to roam.
+      for (let i = 0; i < 26; i++) {
+        const a = i / 26 * Math.PI * 2;
+        const x = Math.cos(a) * (5.45 + random() * .26), z = Math.sin(a) * (4.36 + random() * .22);
+        for (let j = 0; j < 3; j++) ball(island, i % 3 ? 0x84a184 : 0xb2b894, x + (j - 1) * .12, .2, z + Math.sin(j * 2) * .1, .16 + random() * .11, .14, .18);
+      }
+      [[-13, -9, .8], [13, -10, 1.1], [-15, 8, .65]].forEach(([x, z, size], i) => {
+        const distant = new T.Group(); distant.position.set(x, -1.45, z); distant.scale.setScalar(size); scene.add(distant);
+        const land = new T.Mesh(new T.CylinderGeometry(2, 1.4, .46, 30), mat(i % 2 ? 0x90ab9c : 0xa0ae96)); land.scale.z = .74; land.receiveShadow = true; distant.add(land);
+        for (let tree = 0; tree < 3; tree++) {
+          pole(distant, 0x8e8173, (tree - 1) * .62, .37, 0, .055, .65);
+          ball(distant, i % 2 ? 0xa2c0ae : 0xd9b398, (tree - 1) * .62, .83, 0, .35, .38, .33);
+        }
+      });
     }
     // Winding stepping stones lead to the cottage.
     for (let i = 0; i < 14; i++) {
@@ -246,6 +266,42 @@ export function IslandScene(props: Props) {
         ball(island, [0xc9b7d4, 0xf1c6b0, 0xc4d6b5][i], x, 2.15 + i * .24, -.8, .23, .31, .23);
       }
     }
+    let harborBoat: T.Group | null = null;
+    if (props.chapter === 4) {
+      // The village has its own skyline: a bookshop, awnings and a clock tower.
+      const shop = new T.Group(); shop.position.set(3.42, .14, -.92); shop.rotation.y = -.36; island.add(shop);
+      box(shop, 0xe8c7a4, 0, .49, 0, 1.16, .94, .96);
+      const awning = box(shop, 0xb66f61, 0, 1.03, .54, 1.36, .09, .5); awning.rotation.x = -.23;
+      for (let i = -2; i <= 2; i++) box(shop, i % 2 ? 0xf4e5cd : 0xd38e75, i * .23, .96, .7, .21, .08, .18);
+      box(shop, 0x6b8a78, 0, .36, .5, .43, .67, .06);
+      const tower = new T.Group(); tower.position.set(-3.75, .14, -.7); island.add(tower);
+      box(tower, 0xd9bea4, 0, .7, 0, .58, 1.4, .58);
+      mesh(tower, new T.ConeGeometry(.49, .52, 4), 0x9e6f5f, 0, 1.67, 0).rotation.y = Math.PI / 4;
+      const clock = mesh(tower, new T.CylinderGeometry(.18, .18, .03, 24), 0xf9f1d9, 0, 1.21, .31); clock.rotation.x = Math.PI / 2;
+      box(tower, 0x857868, 0, 1.21, .34, .018, .13, .018);
+      box(tower, 0x857868, .045, 1.21, .34, .09, .018, .018);
+      for (let i = 0; i < 5; i++) {
+        const x = -3.3 + i * .47;
+        box(island, i % 2 ? 0xdbbc9c : 0xcaa789, x, .16, -2.56, .37, .045, .28);
+      }
+    }
+    if (props.chapter === 5) {
+      const lighthouse = new T.Group(); lighthouse.position.set(-3.76, .14, -.62); island.add(lighthouse);
+      mesh(lighthouse, new T.CylinderGeometry(.2, .34, 1.9, 16), 0xf3e6d5, 0, .95, 0);
+      for (let y = .4; y < 1.7; y += .53) mesh(lighthouse, new T.CylinderGeometry(.29 - y * .04, .3 - y * .04, .12, 16), 0x9c6f68, 0, y, 0);
+      const lamp = ball(lighthouse, 0xffd997, 0, 2, 0, .24, .21, .24);
+      lamp.material = new T.MeshStandardMaterial({ color: 0xffe3a9, emissive: 0xffcc72, emissiveIntensity: 2 });
+      mesh(lighthouse, new T.ConeGeometry(.38, .35, 16), 0x557d82, 0, 2.34, 0);
+      const dock = new T.Group(); dock.position.set(3.35, .2, 1.45); island.add(dock);
+      for (let i = 0; i < 5; i++) box(dock, i % 2 ? 0xb49a7f : 0xc6ac90, -.8 + i * .34, .02, 0, .31, .065, .8);
+      [-.8, .55].forEach(x => pole(dock, 0x967e67, x, .23, .38, .035, .5));
+      harborBoat = new T.Group(); harborBoat.position.set(2.16, .25, 1.62); island.add(harborBoat);
+      const hull = mesh(harborBoat, new T.ConeGeometry(.37, .91, 4), 0x8d746a, 0, .04, 0); hull.rotation.z = Math.PI / 2; hull.scale.set(.68, 1, .86);
+      pole(harborBoat, 0x947b62, 0, .49, 0, .018, .92);
+      const sail = new T.Shape(); sail.moveTo(0, 0); sail.lineTo(0, .8); sail.lineTo(.57, .08); sail.closePath();
+      const cloth = new T.Mesh(new T.ShapeGeometry(sail), new T.MeshStandardMaterial({ color: 0xf7edce, side: T.DoubleSide })); cloth.position.set(.03, .28, 0); harborBoat.add(cloth);
+      for (let i = 0; i < 4; i++) ball(island, i % 2 ? 0xf7d7a0 : 0xeac3aa, 3.55 + Math.sin(i * 3) * .15, .32, 1.3 + (i - 1.5) * .35, .1, .1, .1);
+    }
     // Garden fences, mushrooms and a bench.
     for (let i = 0; i < 7; i++) { const x = -3.15 + i * .35; box(island, 0xe8dfca, x, .44, 2.28, .065, .6, .065); }
     box(island, 0xe0d6be, -2.1, .42, 2.28, 2.35, .065, .055); box(island, 0xe0d6be, -2.1, .65, 2.28, 2.35, .065, .055);
@@ -350,21 +406,64 @@ export function IslandScene(props: Props) {
     const portraitGround = new T.Mesh(new T.PlaneGeometry(100, 100), new T.MeshStandardMaterial({ color: 0xe9e8e0, roughness: 1 }));
     portraitGround.rotation.x = -Math.PI / 2; portraitGround.position.y = .145; portraitGround.receiveShadow = true; portraitScene.add(portraitGround);
     // Floating task markers are also clickable in the 3D world.
-    const stations: T.Group[] = [], pickables: T.Object3D[] = [];
-    const points = [[-.55, 2.55], [2.65, .12], [-2.2, -.2], [.3, -2.7]];
-    const labels = [["F · J", "D · K", "S · L", "A · ;"], ["G · H", "R · U", "E · I", "W · P"], ["V · M", "C · Z", "Aa", "123"], ["Hello", "Brave", "Mimi", "Story"]][props.chapter];
+    const stations: T.Group[] = [], pickables: T.Object3D[] = [], stationLights: T.MeshStandardMaterial[] = [];
+    const points = (props.chapter >= 4 ? [[-.55, 2.55], [2.65, .12], [-2.2, -.2], [.3, -2.7], [-4.8, 1.6], [4.7, -2], [1.3, -3.9], [.3, 4.45]] : [[-.55, 2.55], [2.65, .12], [-2.2, -.2], [.3, -2.7]]).slice(0, chapterLessons(props.chapter).length);
+    const oldLabels = [["F · J", "D · K", "S · L", "A · ;"], ["G · H", "R · U", "E · I", "W · P"], ["V · M", "C · Z", "Aa", "123"], ["Hello", "Brave", "Mimi", "Story"]];
+    const labels = oldLabels[props.chapter] ?? chapterLessons(props.chapter).map(lesson => lesson.title);
     points.forEach(([x, z], i) => {
       const station = new T.Group(); station.position.set(x, .2, z); island.add(station); stations.push(station);
       const pedestal = mesh(station, new T.CylinderGeometry(.24, .28, .11, 32), 0xf3e5ce, 0, 0, 0); pedestal.userData.station = i; pickables.push(pedestal);
+      const light = new T.MeshStandardMaterial({ color: props.chapter === 5 ? 0x88b9bf : 0xc2ae90, emissive: props.chapter === 5 ? 0x67bcc5 : 0xf2b977, emissiveIntensity: 0 });
+      const beacon = mesh(station, new T.CylinderGeometry(.12, .12, .09, 24), 0xffffff, 0, .09, 0); beacon.material = light; stationLights.push(light); beacon.userData.station = i; pickables.push(beacon);
       const canvas = document.createElement("canvas"); canvas.width = 256; canvas.height = 128;
       const ctx = canvas.getContext("2d")!;
       ctx.fillStyle = "#fffaf0"; ctx.beginPath(); ctx.roundRect(5, 5, 246, 104, 36); ctx.fill();
-      ctx.fillStyle = "#657e70"; ctx.font = "600 45px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(labels[i], 128, 59);
+      ctx.fillStyle = "#657e70"; ctx.font = `600 ${props.chapter >= 4 ? 34 : 45}px sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(labels[i], 128, 59, 225);
       ctx.beginPath(); ctx.moveTo(113, 107); ctx.lineTo(143, 107); ctx.lineTo(128, 123); ctx.fillStyle = "#fffaf0"; ctx.fill();
       const texture = new T.CanvasTexture(canvas); texture.colorSpace = T.SRGBColorSpace;
       const sprite = new T.Sprite(new T.SpriteMaterial({ map: texture, transparent: true, depthTest: false }));
       sprite.position.y = .85; sprite.scale.set(.94, .47, 1); sprite.userData.station = i; station.add(sprite); pickables.push(sprite);
     });
+    const worldPieces: T.Object3D[][] = points.map(() => []);
+    if (props.chapter >= 4) {
+      for (const [index, [x, z]] of points.entries()) {
+        if (index < 4) continue;
+        for (let i = 1; i <= 5; i++) {
+          const t = i / 6;
+          const stone = mesh(island, new T.CylinderGeometry(.19, .22, .04, 7), i % 2 ? 0xd7cbb4 : 0xc8c4ae, x * t, .14, z * t, 1, 1, .8);
+          stone.rotation.y = i * 1.7;
+        }
+        const landmark = new T.Group(); landmark.position.set(x, .16, z - .45); island.add(landmark);
+        mesh(landmark, new T.CylinderGeometry(.55, .6, .075, 24), props.chapter === 5 ? 0xd8d7be : 0xd7bda0, 0, 0, 0);
+        if (props.chapter === 4) {
+          if (index === 4) { box(landmark, 0x9c765d, 0, .48, -.06, .82, .9, .18); box(landmark, 0xb78e68, 0, .97, -.06, .97, .07, .25); }
+          if (index === 5) { pole(landmark, 0x987962, 0, .45, 0, .034, .8); mesh(landmark, new T.ConeGeometry(.66, .34, 8), 0xd58f79, 0, .96, 0); }
+          if (index === 6) { mesh(landmark, new T.CylinderGeometry(.39, .45, .36, 18), 0xc3ad93, 0, .2, 0); pole(landmark, 0xb7a88b, 0, .58, 0, .025, .7); }
+          if (index === 7) { [-.4, .4].forEach(dx => pole(landmark, 0xa07e67, dx, .52, 0, .05, 1)); box(landmark, 0xa07e67, 0, 1.03, 0, .89, .07, .08); }
+        } else {
+          if (index === 4) { pole(landmark, 0x967d65, 0, .65, 0, .065, 1.25); ball(landmark, 0xe6cca3, 0, 1.34, 0, .2, .2, .2); }
+          if (index === 5) { box(landmark, 0x9d806a, 0, .32, 0, 1.06, .6, .65); box(landmark, 0xdec5a5, 0, .67, 0, 1.12, .08, .7); }
+          if (index === 6) { mesh(landmark, new T.CylinderGeometry(.44, .5, .18, 18), 0xd7d4b9, 0, .12, 0); ball(landmark, 0xb4d0bc, 0, .32, 0, .25, .2, .24); }
+          if (index === 7) { pole(landmark, 0x937b68, 0, .8, 0, .028, 1.5); const sail = new T.Shape(); sail.moveTo(0, 0); sail.lineTo(0, .92); sail.lineTo(.7, .18); sail.closePath(); const cloth = new T.Mesh(new T.ShapeGeometry(sail), mat(0xf6ead3)); cloth.position.set(.02, .35, 0); landmark.add(cloth); }
+        }
+        for (let piece = 0; piece < 6; piece++) {
+          const angle = piece / 6 * Math.PI * 2;
+          const px = Math.cos(angle) * .43, pz = Math.sin(angle) * .43;
+          const shape = new T.Group(); shape.position.set(px, .1, pz); landmark.add(shape); worldPieces[index].push(shape);
+          if (props.chapter === 4) {
+            if (index === 4) box(shape, [0x8d9d84, 0xc58d7a, 0x9a8da8][piece % 3], 0, .28, 0, .11, .5, .19);
+            if (index === 5) { box(shape, 0xe4cbaa, 0, .15, 0, .21, .15, .21); ball(shape, 0xc7937c, 0, .26, 0, .13, .08, .13); }
+            if (index === 6) { pole(shape, 0x947961, 0, .33, 0, .018, .62); ball(shape, 0xffd2a2, 0, .68, 0, .08, .1, .08); }
+            if (index === 7) { pole(shape, 0x887463, 0, .37, 0, .014, .55); box(shape, 0xf4c893, 0, .68, 0, .13, .18, .13); }
+          } else {
+            if (index === 4) ball(shape, 0xe5cdb0, 0, .14, 0, .12, .2, .12);
+            if (index === 5) box(shape, 0xb3977c, 0, .22, 0, .25, .32, .24);
+            if (index === 6) ball(shape, piece % 2 ? 0xf6dfc0 : 0xc5d3c4, 0, .12, 0, .17, .12, .12);
+            if (index === 7) box(shape, 0xf0d5aa, 0, .25, 0, .08, .47, .08);
+          }
+        }
+      }
+    }
     // Distant clouds, butterflies, and a tied balloon.
     const clouds: T.Group[] = [];
     [[-6, .5, -3], [5, -.4, -4], [-5, -1.4, 3], [4, 2.9, -5]].forEach(([x, y, z], i) => {
@@ -383,9 +482,11 @@ export function IslandScene(props: Props) {
     const sparks = new T.Points(new T.BufferGeometry(), new T.PointsMaterial({ color: 0xffe4aa, size: .09, transparent: true, opacity: 0, depthWrite: false }));
     const sparkPositions = new Float32Array(40 * 3); sparks.geometry.setAttribute("position", new T.BufferAttribute(sparkPositions, 3)); island.add(sparks);
     let burstAt = -100, lastPulse = live.current.pulse, lastCelebrate = false;
+    let lastKeyHits = live.current.keyHits, keyAt = -100;
     const target = new T.Vector3(.2, .18, 2.4);
-    let questTarget: number | null = null, lastAuto = 0, dragging = false, downX = 0, downY = 0;
+    let questTarget: number | null = null, lastAuto = 0, wanderIndex = 0, dragging = false, downX = 0, downY = 0;
     let walkRoute: T.Vector3[] = [], wasExploring = live.current.exploring;
+    let lastBridgeBuilt = live.current.projects[1] ?? 0, bridgeCelebrationPending = false;
     let pendingStoryAction: AdventureSceneAction | null = null, lastStoryPhase = "", lastStoryCommand = -1;
     let lastStoryHits = live.current.adventure?.hits ?? 0, lastWaterAt = -100, storyCelebrationAt = -100;
     let wasTraining = false, lastFocus = -1, wasCompanionView = false, lastCompanionAngle = "";
@@ -393,7 +494,7 @@ export function IslandScene(props: Props) {
     const overviewPosition = camera.position.clone(), overviewTarget = controls.target.clone();
     const focusTarget = new T.Vector3(), focusCamera = new T.Vector3(), fittedCamera = new T.Vector3();
     function walkTo(x: number, z: number, station: number | null) {
-      const path = planIslandWalk(dog.position, { x, z }, live.current.projects[1] >= 6);
+      const path = planIslandWalk(dog.position, { x, z }, live.current.projects[1] >= 6, live.current.chapter);
       if (!path.length) return false;
       walkRoute = path.map(p => new T.Vector3(p.x, .18, p.z));
       target.copy(walkRoute.shift()!); questTarget = station;
@@ -441,12 +542,17 @@ export function IslandScene(props: Props) {
       renderer.setSize(w, h); camera.aspect = w / h; camera.fov = camera.aspect < 1.1 ? 43 : 34; camera.updateProjectionMatrix();
     };
     const observer = new ResizeObserver(resize); observer.observe(mount); resize();
-    let frame = 0, previous = 0, time = 0;
+    let frame = 0, previous = 0, time = 0, slowFrames = 0, fastFrames = 0, reducedQuality = false;
     const direction = new T.Vector3();
     function animate(now: number) {
       frame = requestAnimationFrame(animate);
       const delta = Math.min((now - previous) / 1000, .05); previous = now;
       if (document.hidden) return;
+      if (delta > .026) { slowFrames++; fastFrames = 0; }
+      else if (delta > 0 && delta < .019) { fastFrames++; slowFrames = 0; }
+      else { slowFrames = 0; fastFrames = 0; }
+      if (!reducedQuality && slowFrames > 90) { reducedQuality = true; renderer.setPixelRatio(Math.min(nativePixelRatio, 1.05)); slowFrames = 0; }
+      else if (reducedQuality && fastFrames > 360) { reducedQuality = false; renderer.setPixelRatio(nativePixelRatio); fastFrames = 0; }
       const state = live.current;
       const closeCompanion = companionViewRef.current && !state.training && !state.celebrate;
       if (closeCompanion !== wasCompanionView) {
@@ -460,9 +566,9 @@ export function IslandScene(props: Props) {
         } else {
           island.add(dog);
           camera.position.copy(companionOverviewPosition); controls.target.copy(companionOverviewTarget);
-          controls.minDistance = 11; controls.maxDistance = 24;
+          controls.minDistance = 11; controls.maxDistance = props.chapter >= 4 ? 29 : 24;
           controls.minPolarAngle = .48; controls.maxPolarAngle = 1.18;
-          renderer.domElement.setAttribute("aria-label", "实时三维花语岛，拖动旋转视角，探索时点击地面移动棉棉");
+          renderer.domElement.setAttribute("aria-label", `实时三维${CHAPTERS[props.chapter].name}，拖动旋转视角，探索时点击地面移动棉棉`);
         }
         wasCompanionView = closeCompanion;
       }
@@ -473,6 +579,12 @@ export function IslandScene(props: Props) {
         lastCompanionAngle = angle;
       }
       if (wasExploring !== state.exploring) { walkRoute = []; questTarget = null; target.copy(dog.position); wasExploring = state.exploring; }
+      if (state.chapter === 0 && (state.projects[1] ?? 0) >= 6 && lastBridgeBuilt < 6) bridgeCelebrationPending = true;
+      lastBridgeBuilt = state.projects[1] ?? 0;
+      if (bridgeCelebrationPending && !state.training && state.exploring && !state.paused) {
+        bridgeCelebrationPending = false;
+        walkTo(1.45, 2.6, null);
+      }
       const story = state.adventure;
       if (story && story.phase !== lastStoryPhase) {
         pendingStoryAction = null;
@@ -487,11 +599,11 @@ export function IslandScene(props: Props) {
       if (story && story.command !== lastStoryCommand) { if (story.command > 0) findSeeds(); lastStoryCommand = story.command; }
       if (state.training && (!wasTraining || lastFocus !== state.focus)) {
         if (!wasTraining) { overviewPosition.copy(camera.position); overviewTarget.copy(controls.target); }
-        const [x, z] = PROJECTS[state.focus].position;
+        const [x, z] = points[state.focus];
         focusTarget.set(x, state.focus === 3 ? 1 : .5, z);
         focusCamera.set(x + 3.4, state.focus === 3 ? 4.5 : 4.6, z + 5.2);
         const companions = [[-1.2, 2.5], [.98, 2.6], [-2.3, .85], [.2, -.2]];
-        walkTo(companions[state.focus][0], companions[state.focus][1], null);
+        walkTo(companions[state.focus]?.[0] ?? x, companions[state.focus]?.[1] ?? z, null);
       }
       if (!state.training && wasTraining) { camera.position.copy(overviewPosition); controls.target.copy(overviewTarget); controls.minDistance = 11; }
       if (state.training) {
@@ -515,7 +627,10 @@ export function IslandScene(props: Props) {
         butterflies.forEach((b, i) => { b.position.set(Math.sin(time * .32 + i * 1.4) * 2.8, .7 + Math.sin(time * .8 + i) * .17, Math.cos(time * .22 + i * 1.4) * 2.4); b.rotation.y = -time * .25; b.children.forEach((wing, j) => { wing.rotation.z = Math.sin(time * 9 + i) * .75 * (j ? 1 : -1); }); });
       }
       ripples.forEach((r, i) => { const a = (time * .22 + i / 3) % 1; r.scale.setScalar(.5 + a * 4); (r.material as T.MeshBasicMaterial).opacity = (1 - a) * .3; });
-      stations.forEach((s, i) => { s.visible = !state.training && !story; s.children[1].position.y = .85 + (movingWorld ? Math.sin(time * 1.4 + i) * .045 : 0); (s.children[1] as T.Sprite).material.opacity = i <= state.available ? 1 : .42; });
+      if (state.keyHits !== lastKeyHits) { if (state.keyHits > lastKeyHits) keyAt = time; lastKeyHits = state.keyHits; }
+      stations.forEach((s, i) => { s.visible = !story && (!state.training || i === state.focus); const sprite = s.children[2] as T.Sprite; sprite.visible = !state.training; sprite.position.y = .85 + (movingWorld ? Math.sin(time * 1.4 + i) * .045 : 0); (sprite.material as T.SpriteMaterial).opacity = i <= state.available ? 1 : .42; stationLights[i].emissiveIntensity = (state.projects[i] ?? 0) / 6 * 1.5 + (state.training && !state.reducedMotion && i === state.focus ? Math.max(0, 1 - (time - keyAt) * 3) * 2 : 0); });
+      worldPieces.forEach((pieces, i) => pieces.forEach((piece, j) => { piece.visible = j < (state.projects[i] ?? 0); }));
+      if (harborBoat && movingWorld) harborBoat.rotation.z = Math.sin(time * 1.3) * .055;
       seedBag.visible = story?.phase === "trail"; footprints.visible = story?.phase === "trail";
       seedGlow.scale.setScalar(movingWorld ? 1 + Math.sin(time * 2) * .09 : 1);
       dogPick.position.copy(dog.position); dogPick.position.y += .55;
@@ -546,9 +661,15 @@ export function IslandScene(props: Props) {
         const blooming = !story || i < 55 || Math.floor((i - 55) / 4) < story.line - 6;
         if (i >= 55) f.children.slice(2).forEach(petal => { petal.visible = blooming; });
         const scale = unlocked ? blooming ? 1 : .65 : .001; const next = state.reducedMotion ? scale : T.MathUtils.damp(f.scale.x, scale, 5, constructionDelta);
-        f.scale.setScalar(next); f.visible = unlocked; if (movingWorld) f.rotation.z = Math.sin(time * 1.1 + i) * .04;
+        f.scale.setScalar(next); f.visible = unlocked && (!reducedQuality || i >= 55 || i % 2 === 0); if (movingWorld && f.visible) f.rotation.z = Math.sin(time * 1.1 + i) * .04;
       });
-      if (movingWorld && !story && !closeCompanion && !state.training && !walkRoute.length && questTarget === null && time - lastAuto > 10) { lastAuto = time; walkTo(.2 + Math.sin(time * .2) * .9, 2.65 + Math.cos(time * .3) * .25, null); }
+      if (movingWorld && !story && !closeCompanion && !state.training && !walkRoute.length && questTarget === null && dog.position.distanceTo(target) < .15 && time - lastAuto > 8) {
+        lastAuto = time;
+        if (state.chapter >= 4) {
+          const destinations = [[-4.8, 1.6], [.3, 4.45], [4.7, -2], [1.3, -3.9], [-.55, 2.55]];
+          const [x, z] = destinations[wanderIndex++ % destinations.length]; walkTo(x, z, null);
+        } else walkTo(.2 + Math.sin(time * .2) * .9, 2.65 + Math.cos(time * .3) * .25, null);
+      }
       direction.subVectors(target, dog.position); direction.y = 0;
       const distance = direction.length(); const walking = distance > .09 && !state.paused && (!state.reducedMotion || state.exploring);
       if (walking) {
@@ -563,7 +684,7 @@ export function IslandScene(props: Props) {
       const age = time - burstAt;
       sparks.visible = age < 1.1 && !state.reducedMotion;
       if (sparks.visible) {
-        const [x, z] = PROJECTS[state.focus].position;
+        const [x, z] = points[state.focus];
         for (let i = 0; i < 40; i++) { const a = i * 2.399; sparkPositions[i * 3] = x + Math.cos(a) * age * (1 + i % 3 * .2); sparkPositions[i * 3 + 1] = .8 + Math.sin(i) * age + age * 2 - age * age * 1.8; sparkPositions[i * 3 + 2] = z + Math.sin(a) * age; }
         sparks.geometry.attributes.position.needsUpdate = true; (sparks.material as T.PointsMaterial).opacity = 1 - age / 1.1;
       }

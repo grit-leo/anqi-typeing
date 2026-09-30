@@ -17,7 +17,7 @@ test("island entry renders a usable curriculum and adventure action before WebGL
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
   const html = await response.text();
-  assert.match(html, /<title>安琪打字机｜花语岛 3D 打字探险<\/title>/);
+  assert.match(html, /<title>安琪打字机｜3D 指法探险<\/title>/);
   for (const label of ["今天，让这里多一点你的痕迹。", "开始小冒险", "练习小屋", "成长手账", "第一颗花种", "找到 F 和 J", "岛屿与旅程", "棉棉的溪边花园", "点击草地"]) assert.ok(html.includes(label), label);
   assert.match(html, /class="world-stage/);
   assert.match(html, /aria-label="小岛建设进度"/);

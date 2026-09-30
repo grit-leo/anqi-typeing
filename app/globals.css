@@ -282,6 +282,10 @@ svg { flex-shrink: 0; }
 .mission-card h2 { font-size: 24px; line-height: 1.4; font-weight: 650; margin: 13px 0 9px; }
 .mission-card>p { font-size: 16px; line-height: 1.75; color: #5d7263; }
 .mission-steps { display: grid; grid-template-columns: repeat(4,1fr); gap: 6px; margin: 19px 0; }
+.mission-steps-wide { grid-template-columns: repeat(4,minmax(0,1fr)); gap: 5px; margin: 12px 0; }
+.mission-steps-wide button { min-width: 0; padding: 7px 3px; gap: 3px; }
+.mission-steps-wide button>span { font-size: 11px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.mission-steps-wide button>small { font-size: 10px; }
 .mission-steps button { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 2px; background: #f3f2e8; border: 1px solid transparent; color: #7f8b7d; border-radius: 9px; }
 .mission-steps button>span { font-size: 14px; }.mission-steps button>small { font-size: 12px; }.mission-steps .step-current { border-color: #809779; color: #41644c; background: #eaf0e0; }.mission-steps .step-done { color: #3f704f; background: #e7eedd; }
 .desktop-game .primary-button { background: #456e56; color: #fffdf2; font-size: 17px; min-height: 48px; border-radius: 9px; }.desktop-game .primary-button:hover { background: #335d44; }
@@ -308,6 +312,19 @@ svg { flex-shrink: 0; }
 .desktop-game .typing-prompt.short-prompt { font-size: 58px; letter-spacing: .09em; min-height: 88px; }
 .desktop-game .pending-letter { color: #76846f; }.desktop-game .typed-letter { color: #538054; }.desktop-game .current-letter { background: #e3ecd5; color: #284b36; }
 .desktop-game .typing-feedback { min-height: 25px; line-height: 25px; font-size: 16px; margin: 0; color: #53704f; }
+.desktop-game .typing-capture-ime { position: relative; display: block; opacity: 1; width: min(100%,440px); height: 42px; margin: 8px auto 4px; padding: 7px 13px; border: 1px solid #a9bea8; border-radius: 10px; background: #fffdf6; color: #2b4d40; font-size: 20px; text-align: center; }
+.desktop-game .typing-capture-ime:focus-visible { outline: 3px solid #92b4a1; outline-offset: 2px; }
+.desktop-game .typing-workspace:has(.typing-capture-ime) .typing-prompt { font-family: system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; font-size: clamp(26px,2.5vw,38px); letter-spacing: .04em; }
+.ime-instruction { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 6px 0 0; color: #536f63; font-size: 14px; text-align: center; }
+.spaced-review-banner { display: flex; align-items: center; gap: 18px; margin-bottom: 18px; padding: 18px 22px; border: 1px solid #cfdcbb; border-radius: 14px; background: #eef3e6; color: #3d6247; }
+.spaced-review-banner>span { flex: none; display: grid; place-items: center; width: 50px; height: 50px; border-radius: 50%; background: #dce9d0; }
+.spaced-review-banner>div { flex: 1; }.spaced-review-banner strong { font-size: 20px; }.spaced-review-banner p { font-size: 15px; margin: 5px 0 0; line-height: 1.5; }
+.spaced-review-banner .primary-button { white-space: nowrap; }
+@media(max-width:740px) { .spaced-review-banner { flex-wrap: wrap; }.spaced-review-banner .primary-button { width: 100%; justify-content: center; } }
+.mastery-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; padding: 18px 22px; margin-bottom: 18px; border: 1px solid #d7e4d0; border-radius: 14px; background: #eff3e9; color: #416049; }
+.mastery-summary>div { flex: 1 1 260px; }.mastery-summary strong { font-size: 20px; }.mastery-summary p { margin: 5px 0 0; font-size: 14px; line-height: 1.5; }
+.mastery-summary>span { display: flex; align-items: baseline; gap: 5px; font-size: 14px; white-space: nowrap; }.mastery-summary b { font-size: 24px; font-weight: 650; }
+.mastery-summary>button { white-space: nowrap; }
 .desktop-game .island-keyboard { background: none; border: 0; border-radius: 0; padding: 7px 0 0; }
 .desktop-game .finger-instruction { font-size: 18px; margin: 0; gap: 10px; line-height: 25px; color: #325b41; }
 .desktop-game .finger-instruction>span:last-child { font-size: 16px; color: #5e715b; }
@@ -329,7 +346,7 @@ svg { flex-shrink: 0; }
 .desktop-game .modal-lead { font-size: 17px; line-height: 1.75; color: #5b715e; }.desktop-game .modal-symbol { width: 48px; height: 48px; margin-bottom: 12px; }.desktop-game .modal-small { font-size: 13px; color: #617456; }.desktop-game .demo-hint { font-size: 14px; color: #637954; }
 .desktop-game .posture-steps { margin-top: 14px; padding: 14px 18px; gap: 9px; }.desktop-game .posture-steps>span { font-size: 16px; color: #536e51; }.desktop-game .home-key-demo { margin: 16px 0 12px; }.desktop-game .modal-primary { margin-top: 17px; }
 .desktop-game .settings-list small,.desktop-game .settings-privacy { font-size: 14px; color: #687760; }.desktop-game .help-steps>p { font-size: 16px; color: #64765a; }
-.desktop-game .journey-modal { width: min(760px,calc(100vw - 32px)); }.journey-modal .chapter-tabs { margin-top: 22px; justify-content: center; }.journey-modal .chapter-tabs button { padding-inline: 13px; font-size: 16px; }.map-lessons { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }.map-lessons>button { text-align: left; display: flex; align-items: center; gap: 12px; padding: 17px; background: #f0f3e7; color: #536c4b; border: 1px solid #dfe6d1; border-radius: 10px; }.map-lessons>button[aria-disabled=true] { opacity: .6; }.map-lessons span { flex: 1; }.map-lessons strong,.map-lessons small { display: block; }.map-lessons strong { font-size: 17px; }.map-lessons small { font-size: 14px; margin-top: 6px; }
+.desktop-game .journey-modal { width: min(760px,calc(100vw - 32px)); }.journey-modal .chapter-tabs { margin-top: 22px; justify-content: flex-start; overflow-x: auto; }.journey-modal .chapter-tabs button { padding-inline: 13px; font-size: 16px; }.map-lessons { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }.map-lessons>button { text-align: left; display: flex; align-items: center; gap: 12px; padding: 17px; background: #f0f3e7; color: #536c4b; border: 1px solid #dfe6d1; border-radius: 10px; }.map-lessons>button[aria-disabled=true] { opacity: .6; }.map-lessons span { flex: 1; }.map-lessons strong,.map-lessons small { display: block; }.map-lessons strong { font-size: 17px; }.map-lessons small { font-size: 14px; margin-top: 6px; }
 .desktop-game.is-library .island-main { width: min(1320px,100%); margin: 0 auto; padding: 34px; }.desktop-game.is-library .heading-note { font-size: 17px; }.desktop-game.is-library .eyebrow { font-size: 12px; }.desktop-game.is-library .lesson-tile p,.desktop-game.is-library .review-banner p:not(.eyebrow) { font-size: 16px; }.desktop-game.is-library .journal-panel p,.desktop-game.is-library .history-row { font-size: 15px; color: #637159; }
 .garden-builds { padding: 28px; background: #ebf0e1; border: 1px solid #dbe3cf; border-radius: 15px; }.garden-builds h2 { font-size: 24px; }.garden-builds>p { font-size: 17px; margin: 12px 0 24px; color: #607557; }.garden-builds>div { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; margin-bottom: 24px; }.garden-builds article { background: #fffef6; border-radius: 12px; padding: 25px; display: flex; flex-direction: column; gap: 13px; color: #59764b; }.garden-builds article strong { font-size: 28px; }.garden-builds article span { font-size: 14px; }
 .desktop-game .island-toast { font-size: 16px; bottom: 20px; z-index: 60; color: #42613e; }
